@@ -54,4 +54,10 @@ V는 최대속력이 아닌 순항속력(not)입니다. 기존 최대속력 열�
 
 ## 단일 Windows EXE 배포
 
-화면의 not 표기는 knot(노트)와 같은 의미이며 수치 변환은 없습니다. Excel 양식의 속력 열은 순항속력 (not)로 표시하며 순항속력 열 이름도 계속 지원합니다. 단일 EXE는 첫 실행 시 포함된 Python과 라이브러리를 사용자 LocalAppData의 ShipRegression 폴더에 자동으로 풀어 실행합니다. 설치할 Python이나 인터넷 연결이 필요하지 않습니다. 첫 실행에는 Windows 기본 PowerShell 및 약 500MB의 여유 공간이 필요합니다. 이후에는 준비된 파일을 재사용합니다.
+화면의 not 표기는 knot(노트)와 같은 의미이며 수치 변환은 없습니다. Excel 양식의 속력 열은 순항속력 (not)로 표시하며 순항속력 열 이름도 계속 지원합니다. 단일 EXE는 첫 실행 시 포함된 Python과 라이브러리를 사용자 LocalAppData의 ShipRegression 폴더에 자동으로 풀어 실행합니다. 설치할 Python이나 인터넷 연결이 필요하지 않습니다. 첫 실행에는 약 512MB의 여유 공간이 필요합니다. v2 실행기는 내장 ZIP 추출기를 사용하므로 PowerShell이 필요하지 않습니다. 이후에는 준비된 파일을 재사용합니다.
+
+## Windows 실행기 v2 (파일 준비 단계 개선)
+
+기존 `Preparing application files. Please wait...` 단계에서 사용하던 PowerShell 호출을 제거했습니다. EXE 안의 ZIP 추출기가 직접 파일을 풀고 CRC를 확인하며 진행률을 표시합니다. 새 캐시 `%LOCALAPPDATA%/NavalShipWeightEstimator/CruiseNot_v2`를 사용하므로 이전 캐시를 직접 삭제할 필요가 없습니다. 실패하면 단계·종료코드와 로그 경로를 오류창에 표시합니다. `startup.log`는 실행기, `runtime.log`는 Python 서버 기록입니다.
+
+Wine 10.0에서 새 EXE의 첫 실행, 9,696개 파일 추출 및 CRC/크기 일치, 서버 응답, 두 번째 실행의 캐시 재사용을 확인했습니다. 실제 Windows PC에서의 검증은 아직 이루어지지 않았습니다.
