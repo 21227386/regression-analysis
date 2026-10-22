@@ -35,7 +35,7 @@ Windows 데스크톱 GUI에서 실적함 엑셀로 회귀계수를 산출하고,
 
 Windows 10/11 64비트용입니다. 첫 실행에서 필요한 파일을 사용자 LocalAppData에 자동 준비하고, 다음 실행부터 재사용합니다. PowerShell이나 Python 설치, 인터넷 연결, 웹서버가 필요하지 않습니다. 약 512MB 이상의 디스크 여유 공간을 확보하세요.
 
-새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v5`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
+새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v6`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
 
 ## 소스로 실행
 
@@ -60,3 +60,11 @@ python -m venv .venv
 ## GUI 표시
 
 좌측 메뉴는 굵은 글씨로 표시하며 버튼은 그라데이션·그림자·눌림 효과를 제공합니다. 상단의 함정·중량 계측 일러스트와 Regression Model의 수식 이미지는 프로그램에 포함되어 오프라인으로 표시됩니다. 오른쪽 아래에는 `Copyright by Naval Ship Design Technology Division`을 표시합니다. 로그 역변환 편향 보정 선택 및 S 표시는 제공하지 않으며 결과 Excel에도 S를 내보내지 않습니다.
+
+## 기호와 영문 글꼴
+
+K, alpha, beta 및 D_T 표시는 수학 기호 이미지로 제공하고 한글 설명은 괄호 안에 표시합니다. 영문에는 Windows에 설치된 Times New Roman을 우선 사용하고, 한글에는 NanumGothic 보조 글꼴을 사용합니다. Times New Roman을 재배포하지 않으며 해당 글꼴이 없는 환경에서는 사용 가능한 세리프 글꼴로 대체합니다. 수식 이미지는 Times 계열과 어울리는 STIX 수학 글꼴로 조판합니다. 검증용 Wine 환경에는 Times New Roman이 설치되어 있지 않아 해당 글꼴 자체의 실제 렌더링은 미검증이며, 대체 세리프 글꼴로 기능·배치를 확인했습니다. 상단 함정 일러스트는 이전 대비 약 45% 확대하고 배경 카드로 강조했습니다.
+
+### v6 비교 화면
+
+제품명에서 N/W를 제거하고 Naval Ship Weight Estimator를 강조했습니다. 실적 중량 비교의 선택 상자에서 전체 함종과 개별 함종의 결과 및 MAE, RMSE, MAPE, R²를 확인할 수 있습니다. 각 지표의 영문명과 한글 설명을 표시하며, 선택은 조회 범위만 바꿉니다. Excel 보고서의 학습자료_적합지표 시트에도 전체 및 함종별 결과가 저장됩니다. R²는 1척 또는 실적 중량이 일정한 경우 산출 불가로 표시합니다. 비교 영역은 작은 화면에서도 스크롤하여 확인할 수 있습니다.

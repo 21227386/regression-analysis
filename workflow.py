@@ -1,6 +1,7 @@
 """Shared desktop workflow: load observations, refit, compare, and estimate."""
 from io import BytesIO
 import pandas as pd
+import numpy as np
 from model import COLUMNS, fit, predict, validate
 from excel_io import workbook_bytes
 
@@ -29,6 +30,26 @@ class EstimatorSession:
         except ValueError as exc:
             self.issue = str(exc)
 
+    def comparison(self, scope='전체 함종'):
+        columns = ['함명', '함종', '경하중량', '예측중량', '오차', '오차율(%)']
+        if self.fitted is None:
+            return pd.DataFrame(columns=columns), {}
+        rows = self.fitted.results
+        if scope != '전체 함종':
+            if scope not in ['구축함', '호위함', '고속함', '지원함']:
+                raise ValueError('알 수 없는 함종입니다.')
+            rows = rows[rows['함종'] == scope]
+        if rows.empty:
+            return rows[columns].copy(), {}
+        actual = rows['경하중량'].to_numpy()
+        error = rows['예측중량'].to_numpy() - actual
+        sst = np.sum((actual - actual.mean()) ** 2)
+        metrics = {'MAE': float(np.mean(np.abs(error))),
+                   'RMSE': float(np.sqrt(np.mean(error ** 2))),
+                   'MAPE': float(np.mean(np.abs(error) / actual) * 100),
+                   'R²': float(1 - np.sum(error ** 2) / sst) if len(rows) > 1 and sst > 0 else float('nan')}
+        return rows[columns].copy(), metrics
+
     def estimate(self, ship_type, length, beam, depth, speed):
         if self.fitted is None:
             raise ValueError(self.issue or '먼저 실적함 자료로 회귀모형을 추정하세요.')
@@ -56,7 +77,9 @@ class EstimatorSession:
                            '추정방식': '호위함 회귀 후 타 함종 DT 산출'}]).to_excel(writer, sheet_name='회귀계수', index=False)
             fit_result.coefficients.to_excel(writer, sheet_name='함종별_DT', index=False)
             fit_result.results.to_excel(writer, sheet_name='실적함_비교', index=False)
-            pd.DataFrame([fit_result.metrics]).to_excel(writer, sheet_name='학습자료_적합지표', index=False)
+            pd.DataFrame([{'조회 범위': scope, '척수': len(self.comparison(scope)[0]), **self.comparison(scope)[1]}
+                          for scope in ['전체 함종', '구축함', '호위함', '고속함', '지원함']]).to_excel(
+                              writer, sheet_name='학습자료_적합지표', index=False)
             for sheet in writer.book:
                 sheet.freeze_panes = 'A2'
                 for col in sheet.columns:

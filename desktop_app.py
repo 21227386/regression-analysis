@@ -11,6 +11,8 @@ import wx
 import wx.dataview as dv
 import wx.lib.buttons as buttons
 import wx.lib.scrolledpanel as scrolled
+import wx.lib.stattext as stattext
+import re
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg, NavigationToolbar2WxAgg
 from matplotlib import rcParams, font_manager
@@ -29,13 +31,89 @@ if FONT.exists():
     if sys.platform == 'win32':
         import ctypes
         ctypes.windll.gdi32.AddFontResourceExW(str(FONT), 0x10, 0)
-rcParams['font.family'] = ['NanumGothic'] if FONT.exists() else ['Malgun Gothic', 'DejaVu Sans']
+ENGLISH_FONT = 'Times New Roman'
+# Windows supplies Times New Roman; keep Korean glyph fallback without redistributing Microsoft fonts.
+windows_fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+for filename in ['times.ttf', 'timesbd.ttf', 'timesi.ttf', 'timesbi.ttf']:
+    candidate = windows_fonts / filename
+    if candidate.exists():
+        font_manager.fontManager.addfont(str(candidate))
+rcParams['font.family'] = [ENGLISH_FONT, 'NanumGothic']
+rcParams['mathtext.fontset'] = 'stix'
 rcParams['axes.unicode_minus'] = False
 
 
+UI_ENGLISH_FONT = ENGLISH_FONT
+
+
+def language_runs(text):
+    return re.findall(r'[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u4e00-\u9fff]+|[^\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u4e00-\u9fff]+', text)
+
+
+def run_font(base, text):
+    font = wx.Font(base)
+    korean = bool(re.search(r'[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u4e00-\u9fff]', text))
+    font.SetFaceName('NanumGothic' if korean else UI_ENGLISH_FONT)
+    return font
+
+
+def mixed_extent(dc, text, font):
+    width, height = 0, 0
+    for part in language_runs(text or ' '):
+        dc.SetFont(run_font(font, part))
+        w, h = dc.GetTextExtent(part)
+        width += w
+        height = max(height, h)
+    return width, height
+
+
+def mixed_draw(dc, text, font, x, y, color):
+    _, height = mixed_extent(dc, text, font)
+    dc.SetTextForeground(color)
+    for part in language_runs(text):
+        dc.SetFont(run_font(font, part))
+        w, h = dc.GetTextExtent(part)
+        dc.DrawText(part, int(x), int(y + (height-h)/2))
+        x += w
+
+
+class BilingualLabel(stattext.GenStaticText):
+    def DoGetBestSize(self):
+        dc = wx.ClientDC(self)
+        sizes = [mixed_extent(dc, line, self.GetFont()) for line in self.GetLabel().split('\n')]
+        return wx.Size(max((w for w, h in sizes), default=0), sum(h for w, h in sizes))
+
+    def OnPaint(self, event):
+        dc = wx.PaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        y = 0
+        for line in self.GetLabel().split('\n'):
+            w, h = mixed_extent(dc, line, self.GetFont())
+            style = self.GetWindowStyleFlag()
+            x = max(0, self.GetClientSize().width-w) if style & wx.ALIGN_RIGHT else 0
+            mixed_draw(dc, line, self.GetFont(), x, y, self.GetForegroundColour())
+            y += h
+
+    def Wrap(self, width):
+        dc = wx.ClientDC(self)
+        lines = []
+        for original in self.GetLabel().split('\n'):
+            line = ''
+            for char in original:
+                if line and mixed_extent(dc, line+char, self.GetFont())[0] > width:
+                    lines.append(line.rstrip())
+                    line = char.lstrip()
+                else:
+                    line += char
+            lines.append(line)
+        self.SetLabel('\n'.join(lines))
+
+
 def label(parent, text, size=10, bold=False, color=INK):
-    item = wx.StaticText(parent, label=text)
+    item = BilingualLabel(parent, label=text)
     font = item.GetFont()
+    font.SetFaceName(UI_ENGLISH_FONT)
     font.SetPointSize(size)
     font.SetWeight(wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL)
     item.SetFont(font)
@@ -68,10 +146,8 @@ class ElevatedButton(buttons.GenButton):
         gc.SetPen(wx.Pen(shade(-28) if self.IsEnabled() else '#D5DEE7', 1))
         gc.DrawRoundedRectangle(1, y, max(width-4, 1), max(height-6, 1), 7)
         fg = self.GetForegroundColour() if self.IsEnabled() else wx.Colour('#95A4B3')
-        gc.SetFont(self.GetFont(), fg)
-        dc.SetFont(self.GetFont())
-        tw, th = gc.GetTextExtent(self.GetLabel())[:2]
-        gc.DrawText(self.GetLabel(), (width-tw)/2 + int(down), (height-th)/2 - 1 + int(down))
+        tw, th = mixed_extent(dc, self.GetLabel(), self.GetFont())
+        mixed_draw(dc, self.GetLabel(), self.GetFont(), (width-tw)/2 + int(down), (height-th)/2 - 1 + int(down), fg)
         if self.hasFocus and self.IsEnabled():
             dc.SetBrush(wx.TRANSPARENT_BRUSH)
             dc.SetPen(wx.Pen('#93C8D0', 1, wx.PENSTYLE_DOT))
@@ -83,16 +159,15 @@ def button(parent, text, callback, kind='secondary'):
     item.SetBezelWidth(2)
     item.SetUseFocusIndicator(True)
     font = item.GetFont()
-    font.SetPointSize(10)
+    font.SetFaceName(UI_ENGLISH_FONT)
+    font.SetPointSize(11)
     font.SetWeight(wx.FONTWEIGHT_BOLD)
     item.SetFont(font)
     base, hover, fg = ('#087F8C', '#066C78', '#FFFFFF') if kind == 'primary' else ('#EAF0F6', '#DCE7F0', '#284660')
     item.SetBackgroundColour(base)
     item.SetForegroundColour(fg)
     measurement_dc = wx.ClientDC(item)
-    measure = wx.GraphicsContext.Create(measurement_dc)
-    measure.SetFont(font, wx.Colour(fg))
-    width = int(measure.GetTextExtent(text)[0]) + 40
+    width = mixed_extent(measurement_dc, text, font)[0] + 40
     item.SetMinSize((width, 42))
     item.Bind(wx.EVT_BUTTON, callback)
     def enter(event):
@@ -127,6 +202,43 @@ class Card(wx.Panel):
         dc.DrawRoundedRectangle(0, 0, max(w-1, 0), max(h-1, 0), 12)
 
 
+def symbol_bitmap(key, light=False, size=(34, 26)):
+    filename = 'symbol_' + key + ('_light' if light else '') + '.png'
+    path = Path(__file__).resolve().parent / 'assets/images' / filename
+    return wx.Bitmap(wx.Image(str(path)).Scale(size[0], size[1], wx.IMAGE_QUALITY_HIGH))
+
+
+def math_caption(parent, key, description, light=False):
+    row = wx.BoxSizer(wx.HORIZONTAL)
+    image = wx.StaticBitmap(parent, bitmap=symbol_bitmap(key, light))
+    row.Add(image, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+    text = label(parent, '(' + description + ')', 10, color='#C0D2E5' if light else '#7A8DA2')
+    row.Add(text, 0, wx.ALIGN_CENTER_VERTICAL)
+    return row, image, text
+
+
+class IllustrationPanel(wx.Panel):
+    def __init__(self, parent, bitmap):
+        super().__init__(parent)
+        self.bitmap = bitmap
+        self.SetMinSize((bitmap.GetWidth()+20, bitmap.GetHeight()+20))
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self.paint)
+
+    def GetBitmap(self):
+        return self.bitmap
+
+    def paint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        w, h = self.GetClientSize()
+        dc.SetBrush(wx.Brush('#E2EDF6'))
+        dc.SetPen(wx.Pen('#CADFEF', 1))
+        dc.DrawRoundedRectangle(0, 0, w-1, h-1, 14)
+        dc.DrawBitmap(self.bitmap, (w-self.bitmap.GetWidth())//2, (h-self.bitmap.GetHeight())//2, True)
+
+
 class Workspace(wx.Simplebook):
     def __init__(self, parent, changed):
         super().__init__(parent)
@@ -138,9 +250,33 @@ class Workspace(wx.Simplebook):
         return result
 
 
+class BilingualRenderer(dv.DataViewCustomRenderer):
+    def __init__(self, window):
+        super().__init__('string', dv.DATAVIEW_CELL_INERT, wx.ALIGN_LEFT)
+        self.window = window
+        self.value = ''
+
+    def SetValue(self, value):
+        self.value = str(value)
+        return True
+
+    def GetValue(self):
+        return self.value
+
+    def GetSize(self):
+        return wx.Size(100, 23)
+
+    def Render(self, rect, dc, state):
+        fg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHTTEXT) if state & dv.DATAVIEW_CELL_SELECTED else wx.Colour(INK)
+        _, h = mixed_extent(dc, self.value, self.window.GetFont())
+        mixed_draw(dc, self.value, self.window.GetFont(), rect.x+3, rect.y+max(0, (rect.height-h)//2), fg)
+        return True
+
+
 class Table(dv.DataViewListCtrl):
     def __init__(self, parent):
         super().__init__(parent, style=dv.DV_ROW_LINES | dv.DV_VERT_RULES)
+        self.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
 
     def show_frame(self, frame):
         self.Freeze()
@@ -150,7 +286,11 @@ class Table(dv.DataViewListCtrl):
             for name in frame.columns:
                 title = '순항속력 (not)' if name == '순항속력' else str(name)
                 width = {'함종': 72, 'D_T': 80, '실적선 수': 70}.get(str(name), 130)
-                self.AppendTextColumn(title, width=width)
+                column = dv.DataViewColumn('' if str(name) == 'D_T' else title,
+                                           BilingualRenderer(self), self.GetColumnCount(), width=width)
+                if str(name) == 'D_T':
+                    column.SetBitmap(wx.BitmapBundle.FromBitmap(symbol_bitmap('DT', size=(28, 20))))
+                self.AppendColumn(column)
             for row in frame.itertuples(index=False, name=None):
                 self.AppendItem([f'{v:,.5g}' if isinstance(v, (float, np.floating)) else str(v) for v in row])
         finally:
@@ -161,7 +301,7 @@ class EstimatorFrame(wx.Frame):
     def __init__(self):
         super().__init__(None, title='Naval Ship Weight Estimator', size=(1280, 900))
         self.SetMinSize((1020, 740))
-        self.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
+        self.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=UI_ENGLISH_FONT))
         self.session = EstimatorSession()
         self.synthetic = False
         self.source_text = '실적함 엑셀 파일을 불러오세요.'
@@ -176,9 +316,11 @@ class EstimatorFrame(wx.Frame):
         sidebar.SetBackgroundColour(NAVY)
         sidebar.SetMinSize((210, -1))
         side = wx.BoxSizer(wx.VERTICAL)
-        side.Add(label(sidebar, 'N / W', 25, True, '#6FE0D4'), 0, wx.ALL, 24)
-        brand = label(sidebar, 'NAVAL SHIP\nWEIGHT\nESTIMATOR', 13, True, '#FFFFFF')
-        side.Add(brand, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        brand = label(sidebar, 'Naval Ship\nWeight\nEstimator', 22, True, '#FFFFFF')
+        side.Add(brand, 0, wx.ALL, 24)
+        rule = wx.Panel(sidebar, size=(58, 3))
+        rule.SetBackgroundColour('#6FE0D4')
+        side.Add(rule, 0, wx.LEFT | wx.BOTTOM, 24)
         side.Add(label(sidebar, 'DESIGN WORKSPACE', 8, True, '#8FA7C1'), 0, wx.LEFT | wx.TOP | wx.BOTTOM, 24)
         self.navigation = []
         titles = [('01', 'Input Data'), ('02', 'Regression Model'), ('03', 'Weight Estimation'), ('04', 'Insights & 3D')]
@@ -186,6 +328,8 @@ class EstimatorFrame(wx.Frame):
             nav = buttons.GenButton(sidebar, label=f'{number}   {name}', style=wx.BORDER_NONE)
             nav.SetBezelWidth(0)
             nav_font = nav.GetFont()
+            nav_font.SetFaceName(UI_ENGLISH_FONT)
+            nav_font.SetPointSize(11)
             nav_font.SetWeight(wx.FONTWEIGHT_BOLD)
             nav.SetFont(nav_font)
             nav.SetMinSize((186, 48))
@@ -210,14 +354,15 @@ class EstimatorFrame(wx.Frame):
         heading.Add(title_group, 1)
         self.state = label(content, '●  NO DATA', 10, True, '#7D8DA0')
         self.state.SetMinSize((160, -1))
-        heading.Add(self.state, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 14)
+        title_group.Add(self.state, 0, wx.TOP, 12)
         image_path = Path(__file__).resolve().parent / 'assets/images/ship_weight_illustration.png'
-        image = wx.Image(str(image_path)).Scale(252, 84, wx.IMAGE_QUALITY_HIGH)
-        self.header_illustration = wx.StaticBitmap(content, bitmap=wx.Bitmap(image))
+        self.art_width = 366 if self.GetSize().height >= 840 else 330
+        image = wx.Image(str(image_path)).Scale(self.art_width, self.art_width//3, wx.IMAGE_QUALITY_HIGH)
+        self.header_illustration = IllustrationPanel(content, wx.Bitmap(image))
         heading.Add(self.header_illustration, 0, wx.ALIGN_CENTER_VERTICAL)
-        body.Add(heading, 0, wx.EXPAND | wx.ALL, 24)
+        body.Add(heading, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 24)
         self.notice = label(content, self.source_text, 10, color='#6F8398')
-        body.Add(self.notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        body.Add(self.notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.TOP, 18)
         self.tabs = Workspace(content, self.select_page)
         self.build_input()
         self.build_model()
@@ -230,7 +375,7 @@ class EstimatorFrame(wx.Frame):
         status = self.CreateStatusBar(2)
         status.SetStatusWidths([-1, 440])
         self.copyright = label(status, 'Copyright by Naval Ship Design Technology Division', 8, color='#6F8398')
-        self.copyright.SetWindowStyleFlag(wx.ALIGN_RIGHT | wx.ST_NO_AUTORESIZE)
+        self.copyright.SetWindowStyleFlag(wx.ALIGN_RIGHT | wx.ST_NO_AUTORESIZE | wx.BORDER_NONE)
         def position_copyright(event=None):
             rect = status.GetFieldRect(1)
             self.copyright.SetSize(rect.x+4, rect.y+2, max(rect.width-16, 0), max(rect.height-3, 0))
@@ -303,7 +448,8 @@ class EstimatorFrame(wx.Frame):
         s.Add(data_card, 1, wx.EXPAND)
 
     def build_model(self):
-        p, s = self.page('Regression Model')
+        p, s = self.page('Regression Model', scroll=True)
+        self.model_panel = p
         intro = Card(p)
         info = wx.BoxSizer(wx.VERTICAL)
         top = wx.BoxSizer(wx.HORIZONTAL)
@@ -313,18 +459,23 @@ class EstimatorFrame(wx.Frame):
         equation_path = Path(__file__).resolve().parent / 'assets/images/regression_equation.png'
         equation = wx.Image(str(equation_path)).Scale(570, 83, wx.IMAGE_QUALITY_HIGH)
         self.equation_bitmap = wx.StaticBitmap(intro, bitmap=wx.Bitmap(equation))
-        info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
-        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 호위함, D_T = 1', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 호위함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
         info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         intro.SetSizer(info)
         s.Add(intro, 0, wx.EXPAND | wx.BOTTOM, 18)
         tiles = wx.BoxSizer(wx.HORIZONTAL)
         self.coefficient_values = {}
+        self.coefficient_symbols = {}
+        self.coefficient_descriptions = {}
         for name, description in [('K', '기본 회귀계수'), ('alpha', '크기 지수'), ('beta', '속력 지수')]:
             tile = Card(p)
             ts = wx.BoxSizer(wx.VERTICAL)
-            ts.Add(label(tile, name + '  /  ' + description, 9, color='#7A8DA2'), 0, wx.LEFT | wx.TOP, 16)
+            caption, image, text = math_caption(tile, name, description)
+            self.coefficient_symbols[name] = image
+            self.coefficient_descriptions[name] = text
+            ts.Add(caption, 0, wx.LEFT | wx.TOP, 14)
             value = label(tile, '—', 23, True, ACCENT)
             ts.Add(value, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 16)
             self.coefficient_values[name] = value
@@ -335,24 +486,44 @@ class EstimatorFrame(wx.Frame):
         dt = Card(p)
         dt.SetMinSize((270, -1))
         ds = wx.BoxSizer(wx.VERTICAL)
-        ds.Add(label(dt, '함종별 설계계수', 12, True), 0, wx.ALL, 18)
-        ds.Add(label(dt, '호위함 계수 고정 후 D_T 추정', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        caption, self.dt_symbol, _ = math_caption(dt, 'DT', '함종별 설계계수')
+        ds.Add(caption, 0, wx.ALL, 18)
+        ds.Add(label(dt, '호위함 회귀계수 고정 후 산출', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         self.dt_table = Table(dt)
         ds.Add(self.dt_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         dt.SetSizer(ds)
         bottom.Add(dt, 0, wx.EXPAND | wx.RIGHT, 18)
         compare = Card(p)
         cs = wx.BoxSizer(wx.VERTICAL)
-        cs.Add(label(compare, '실적 중량 비교', 12, True), 0, wx.ALL, 18)
+        title_row = wx.BoxSizer(wx.HORIZONTAL)
+        title_row.Add(label(compare, '실적 중량 비교', 12, True), 1, wx.ALIGN_CENTER_VERTICAL)
+        self.comparison_scope = wx.Choice(compare, choices=['전체 함종'] + SHIP_TYPES)
+        self.comparison_scope.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
+        self.comparison_scope.SetSelection(0)
+        self.comparison_scope.Bind(wx.EVT_CHOICE, self.refresh_comparison)
+        title_row.Add(self.comparison_scope, 0)
+        cs.Add(title_row, 0, wx.EXPAND | wx.ALL, 18)
         self.metrics = label(compare, '회귀모형을 추정하면 적합 지표가 표시됩니다.', 10, True)
         cs.Add(self.metrics, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        explanations = [
+            'MAE (Mean Absolute Error): 평균 절대오차 · tonne',
+            'RMSE (Root Mean Squared Error): 제곱평균제곱근오차 · tonne',
+            'MAPE (Mean Absolute Percentage Error): 평균 절대백분율오차 · %',
+            'R² (Coefficient of Determination): 결정계수 · 1에 가까울수록 적합',
+            'MAE / RMSE / MAPE는 작을수록 좋습니다. R²는 음수일 수 있으며,',
+            '자료가 1척이거나 실적 중량이 모두 같으면 R²를 산출할 수 없습니다.'
+        ]
+        for explanation in explanations:
+            cs.Add(label(compare, explanation, 9, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18 if explanation == explanations[-1] else 6)
         self.model_warning = label(compare, '학습자료에 대한 적합 오차이며 독립 검증 성능이 아닙니다.', 9, color='#A37B35')
         cs.Add(self.model_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         self.result_table = Table(compare)
+        self.result_table.SetMinSize((-1, 220))
         cs.Add(self.result_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         compare.SetSizer(cs)
         bottom.Add(compare, 1, wx.EXPAND)
         s.Add(bottom, 1, wx.EXPAND)
+        p.SetupScrolling(scroll_x=False)
 
     def build_design(self):
         p, s = self.page('Weight Estimation', scroll=True)
@@ -364,6 +535,7 @@ class EstimatorFrame(wx.Frame):
         ps.Add(label(params, '새 함정의 함종과 제원을 입력하세요.', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
         ps.Add(label(params, '함종', 10, True), 0, wx.LEFT | wx.BOTTOM, 22)
         self.ship_type = wx.Choice(params, choices=SHIP_TYPES, size=(-1, 36))
+        self.ship_type.SetFont(wx.Font(11, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
         self.ship_type.SetStringSelection('호위함')
         ps.Add(self.ship_type, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
         fields = wx.FlexGridSizer(cols=2, vgap=20, hgap=16)
@@ -397,10 +569,14 @@ class EstimatorFrame(wx.Frame):
         rs.Add(self.prediction, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         self.prediction_detail = label(result, '실적함 데이터를 업로드하면 추정할 수 있습니다.', 10, color='#C0D2E5')
         rs.Add(self.prediction_detail, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        factor_row, self.design_dt_symbol, _ = math_caption(result, 'DT', '설계계수', light=True)
+        self.design_factor = label(result, '—', 12, True, '#C0D2E5')
+        factor_row.Add(self.design_factor, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 10)
+        rs.Add(factor_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         self.prediction_warning = label(result, '', 10, color='#F3CB87')
         rs.Add(self.prediction_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         rs.AddStretchSpacer()
-        rs.Add(label(result, '호위함 기반 회귀모형 + 함종별 D_T', 10, True, '#FFFFFF'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        rs.Add(label(result, '호위함 기반 회귀모형 + 함종별 설계계수', 10, True, '#FFFFFF'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         info = label(result, '학습자료 범위를 벗어난 제원은 외삽으로 안내합니다.\n예측값은 설계 검토를 위한 추정치입니다.', 9, color='#C0D2E5')
         rs.Add(info, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         result.SetSizer(rs)
@@ -420,6 +596,8 @@ class EstimatorFrame(wx.Frame):
         self.graph_mode = wx.Choice(p, choices=['실적 중량 vs 예측 중량', '함종별 3차원 곡면', '로그 공간 평면'])
         self.graph_mode.SetSelection(0)
         self.graph_type = wx.Choice(p, choices=SHIP_TYPES)
+        self.graph_type.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
+        self.graph_mode.SetFont(self.graph_type.GetFont())
         self.graph_type.SetStringSelection('호위함')
         for control in [self.graph_mode, self.graph_type]:
             row.Add(control, 0, wx.RIGHT, 12)
@@ -503,6 +681,7 @@ class EstimatorFrame(wx.Frame):
 
     def clear_prediction(self, event=None):
         self.prediction.SetLabel('— tonne')
+        self.design_factor.SetLabel('—')
         self.prediction_detail.SetLabel('입력 제원으로 경하중량 추정 버튼을 누르세요.')
         self.prediction_warning.SetLabel('')
 
@@ -524,6 +703,7 @@ class EstimatorFrame(wx.Frame):
                 summary += f'  |  동일 제원·중량 중복 {duplicate}행: 중복 반영 여부를 확인하세요.'
             self.counts.SetLabel(summary)
         if fitted is None:
+            self.coefficients.Show()
             self.coefficients.SetLabel(self.session.issue)
             for field in self.coefficient_values.values():
                 field.SetLabel('—')
@@ -534,12 +714,9 @@ class EstimatorFrame(wx.Frame):
         else:
             for name, value in zip(['K', 'alpha', 'beta'], [fitted.k, fitted.alpha, fitted.beta]):
                 self.coefficient_values[name].SetLabel(f'{value:.6g}')
-            self.coefficients.SetLabel(f'K = {fitted.k:.8g}     alpha = {fitted.alpha:.7g}     beta = {fitted.beta:.7g}')
+            self.coefficients.Hide()
             self.dt_table.show_frame(fitted.coefficients)
-            comparison = ['함명', '함종', '경하중량', '예측중량', '오차', '오차율(%)']
-            self.result_table.show_frame(fitted.results[comparison])
-            items = [f'{k}: {v:.4g}' for k, v in fitted.metrics.items()]
-            self.metrics.SetLabel('   |   '.join(items[:2]) + '\n' + '   |   '.join(items[2:]))
+            self.refresh_comparison()
             warnings = ['학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
             if fitted.condition > 30:
                 warnings.append('호위함 자료의 공선성이 높아 계수가 불안정할 수 있습니다.')
@@ -553,6 +730,20 @@ class EstimatorFrame(wx.Frame):
         self.Layout()
         self.SetStatusText('가상 예제 사용 중' if self.synthetic else ('회귀모형 추정 완료' if fitted else self.session.issue))
 
+    def refresh_comparison(self, event=None):
+        scope = self.comparison_scope.GetStringSelection()
+        rows, metrics = self.session.comparison(scope)
+        self.result_table.show_frame(rows)
+        if not metrics:
+            text = f'{scope}: 비교할 자료가 없습니다.'
+        else:
+            values = [f'{key}: {value:.4g}' + (' tonne' if key in ['MAE', 'RMSE'] else '%' if key == 'MAPE' else '') if np.isfinite(value) else f'{key}: 산출 불가'
+                      for key, value in metrics.items()]
+            text = f'{scope} · {len(rows)}척\n' + '   |   '.join(values[:2]) + '\n' + '   |   '.join(values[2:])
+        self.metrics.SetLabel(text)
+        self.model_panel.Layout()
+        self.model_panel.FitInside()
+
     def estimate(self, event=None):
         try:
             values = [float(field.GetValue().strip()) for field in self.inputs]
@@ -560,7 +751,8 @@ class EstimatorFrame(wx.Frame):
             result, outside = self.session.estimate(ship_type, *values)
             self.prediction.SetLabel(f'{result:,.2f} tonne')
             factor = self.session.fitted.coefficients.set_index('함종').loc[ship_type, 'D_T']
-            self.prediction_detail.SetLabel(f'{ship_type}  |  D_T = {factor:.6g}  |  경하중량 추정값')
+            self.prediction_detail.SetLabel(f'{ship_type} (경하중량 추정값)')
+            self.design_factor.SetLabel(f'{factor:.6g}')
             warning = ('관측 범위를 벗어난 입력: ' + ', '.join(outside) + '. 외삽 결과에 주의하세요.') if outside else ''
             if self.synthetic:
                 warning = '가상 예제 계수로 계산한 결과입니다. 실제 설계에 사용하지 마세요. ' + warning
@@ -633,7 +825,7 @@ class EstimatorFrame(wx.Frame):
             ax.set_xlabel('ln(LBH / m³)' if mode == 2 else 'LBH (m³)')
             ax.set_ylabel('ln(Vc / not)' if mode == 2 else '순항속력 (not)')
             ax.set_zlabel('ln(W / tonne)' if mode == 2 else '경하중량 (tonne)')
-            ax.set_title(typ + f' · D_T={factor:.5g}')
+            ax.set_title(typ + rf' · $D_T={factor:.5g}$')
             ax.legend()
         self.canvas.draw()
 
@@ -652,6 +844,16 @@ def smoke_test(frame, output):
     frame.ship_type.SetStringSelection('호위함')
     frame.estimate()
     assert '—' not in frame.prediction.GetLabel()
+    fitted_before = frame.session.fitted
+    for scope in ['전체 함종'] + SHIP_TYPES:
+        frame.comparison_scope.SetStringSelection(scope)
+        frame.refresh_comparison()
+        assert frame.result_table.GetItemCount() == (48 if scope == '전체 함종' else 12)
+        assert scope in frame.metrics.GetLabel()
+        assert frame.session.fitted is fitted_before
+    frame.comparison_scope.SetSelection(0)
+    frame.refresh_comparison()
+    checks.append('Overall and ship-type comparison selector, metrics and unchanged model: PASS')
     checks.append('Workbook load, auto fit, table and prediction: PASS')
     for mode in [0, 1, 2]:
         frame.graph_mode.SetSelection(mode)
@@ -675,13 +877,32 @@ def smoke_test(frame, output):
     assert all(nav.GetFont().GetWeight() == wx.FONTWEIGHT_BOLD for nav in frame.navigation)
     assert frame.equation_bitmap.GetBitmap().IsOk() and frame.header_illustration.GetBitmap().IsOk()
     assert isinstance(frame.upload_button, ElevatedButton)
+    if wx.FontEnumerator.IsValidFacename(ENGLISH_FONT):
+        assert frame.navigation[0].GetFont().GetFaceName().casefold() == ENGLISH_FONT.casefold()
+        assert frame.upload_button.GetFont().GetFaceName().casefold() == ENGLISH_FONT.casefold()
+        checks.append('Times New Roman selection: PASS')
+    else:
+        checks.append('Times New Roman not installed in validation environment; exact font rendering UNVERIFIED (requested in application)')
+    assert frame.header_illustration.GetBitmap().GetWidth() >= 330
+    assert all(control.GetBitmap().IsOk() for control in frame.coefficient_symbols.values())
+    assert all(control.GetLabel().startswith('(') and '/' not in control.GetLabel() for control in frame.coefficient_descriptions.values())
+    assert frame.dt_symbol.GetBitmap().IsOk() and frame.design_dt_symbol.GetBitmap().IsOk()
+
     assert frame.prediction.GetLabel() == '— tonne'
-    checks.append('Report export, replacement upload, bold navigation, copyright, equation/ship images, raised buttons and uncorrected model: PASS')
+    checks.append('Report export, replacement upload, configured serif font, parenthesized math-image captions, enlarged ship art, copyright, raised buttons and uncorrected model: PASS')
     Path(output).write_text('\n'.join(checks), encoding='utf-8')
 
 
 def main():
     app = wx.App(False)
+    global UI_ENGLISH_FONT
+    if wx.FontEnumerator.IsValidFacename(ENGLISH_FONT):
+        UI_ENGLISH_FONT = ENGLISH_FONT
+    else:
+        # Exact Times New Roman is used when installed. Validation on non-Windows
+        # hosts may use a Times-compatible serif; no Microsoft font is bundled.
+        UI_ENGLISH_FONT = next((name for name in ['Liberation Serif', 'Times', 'Nimbus Roman']
+                                if wx.FontEnumerator.IsValidFacename(name)), ENGLISH_FONT)
     app.SetAppName('Naval Ship Weight Estimator')
     frame = EstimatorFrame()
     frame.Show()
