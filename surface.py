@@ -33,10 +33,11 @@ def mass_surface(fitted, ship_type, logarithmic=False):
     fig = go.Figure(go.Surface(x=sx, y=sy, z=sz, opacity=.7, colorscale='Viridis',
                               name='회귀 곡면', colorbar={'title': 'ln(W)' if logarithmic else 'W (tonne)'},
                               hovertemplate='X: %{x:.3f}<br>Y: %{y:.3f}<br>Z: %{z:.3f}<extra>예측 곡면</extra>'))
-    fig.add_trace(go.Scatter3d(x=ox, y=oy, z=actual, mode='markers', name='실적 중량',
-                               text=selected['함명'].tolist(), marker={'size': 5, 'color': '#ef553b'},
+    fig.add_trace(go.Scatter3d(x=ox, y=oy, z=actual, mode='markers+text', name='실적 중량',
+                               text=selected['함명'].tolist(), textposition='top center', marker={'size': 5, 'color': '#ef553b'},
                                hovertemplate='%{text}<br>X: %{x:.3f}<br>Y: %{y:.3f}<br>Z: %{z:.3f}<extra>실적</extra>'))
-    fig.add_trace(go.Scatter3d(x=ox, y=oy, z=predicted, mode='markers', name='예측 중량',
+    fig.add_trace(go.Scatter3d(x=ox, y=oy, z=predicted, mode='markers+text', name='예측 중량',
+                               text=selected['함명'].tolist(), textposition='bottom center',
                                marker={'size': 3, 'color': '#163d78'}))
     lx, ly, lz = [], [], []
     for a, b, c, d in zip(ox, oy, actual, predicted):

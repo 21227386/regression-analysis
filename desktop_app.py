@@ -602,6 +602,11 @@ class EstimatorFrame(wx.Frame):
         for control in [self.graph_mode, self.graph_type]:
             row.Add(control, 0, wx.RIGHT, 12)
             control.Bind(wx.EVT_CHOICE, self.draw_graph)
+        self.show_ship_names = wx.CheckBox(p, label='함명 표시')
+        self.show_ship_names.SetFont(self.graph_type.GetFont())
+        self.show_ship_names.SetValue(True)
+        self.show_ship_names.Bind(wx.EVT_CHECKBOX, self.draw_graph)
+        row.Add(self.show_ship_names, 0, wx.ALIGN_CENTER_VERTICAL)
         s.Add(row, 0, wx.ALL, 16)
         s.Add(label(p, '곡면: X=LBH(m³), Y=순항속력(kn), Z=경하중량(tonne). 빨간 점=실적, 선=실적−예측 차이. 마우스로 회전할 수 있습니다.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.figure = Figure(figsize=(9, 5), facecolor='white', constrained_layout=True)
@@ -786,6 +791,10 @@ class EstimatorFrame(wx.Frame):
                 subset = fitted.results[fitted.results['함종'] == typ]
                 if not subset.empty:
                     ax.scatter(subset['경하중량'], subset['예측중량'], label=typ, s=35, alpha=.85)
+                    if self.show_ship_names.GetValue():
+                        for name, actual, predicted in zip(subset['함명'], subset['경하중량'], subset['예측중량']):
+                            ax.annotate(str(name), (actual, predicted), xytext=(5, 5), textcoords='offset points',
+                                        fontsize=8, color=INK, annotation_clip=True)
             limits = fitted.results[['경하중량', '예측중량']].to_numpy()
             lo, hi = limits.min(), limits.max()
             ax.plot([lo, hi], [lo, hi], '--', color='#73869B', label='실적 = 예측')
@@ -823,6 +832,9 @@ class EstimatorFrame(wx.Frame):
             ox, oy = transform(volume), transform(v)
             actual, pred = transform(selected['경하중량'].to_numpy()), transform(selected['예측중량'].to_numpy())
             ax.scatter(ox, oy, actual, color='#E7563F', s=30, label='실적 중량')
+            if self.show_ship_names.GetValue():
+                for name, a, b, c in zip(selected['함명'], ox, oy, actual):
+                    ax.text(a, b, c, '  ' + str(name), fontsize=8, color=INK)
             for a, b, c, d in zip(ox, oy, actual, pred):
                 ax.plot([a, a], [b, b], [c, d], color='#E7563F', alpha=.8)
             ax.set_xlabel('ln(LBH / m³)' if mode == 2 else 'LBH (m³)')
@@ -863,6 +875,15 @@ def smoke_test(frame, output):
     for mode in [0, 1, 2]:
         frame.graph_mode.SetSelection(mode)
         frame.draw_graph()
+        expected = data['함명'] if mode == 0 else data.loc[data['함종'] == frame.graph_type.GetStringSelection(), '함명']
+        labels = [text.get_text().strip() for text in frame.figure.axes[0].texts]
+        assert sorted(labels) == sorted(expected.tolist())
+        frame.show_ship_names.SetValue(False)
+        frame.draw_graph()
+        assert not frame.figure.axes[0].texts
+        frame.show_ship_names.SetValue(True)
+        frame.draw_graph()
+    checks.append('Ship names attached to every observed point in comparison, 3D and log plane; visibility toggle: PASS')
     frame.ship_type.SetStringSelection('상륙함')
     frame.estimate()
     assert '—' not in frame.prediction.GetLabel()
@@ -954,7 +975,7 @@ def main():
                     frame.estimate()
                     frame.Raise()
                     target = Path(sys.argv[sys.argv.index('--capture-path') + 1])
-                    for index, suffix in [(2, ''), (0, '_input'), (1, '_model')]:
+                    for index, suffix in [(2, ''), (0, '_input'), (1, '_model'), (3, '_graph')]:
                         frame.tabs.SetSelection(index)
                         frame.Refresh()
                         frame.Update()
