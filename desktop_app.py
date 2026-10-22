@@ -590,7 +590,7 @@ class EstimatorFrame(wx.Frame):
         reference = Card(p)
         ref = wx.BoxSizer(wx.VERTICAL)
         ref.Add(label(reference, '순항속력 참고 범위  /  kn = knot(노트) · 상륙함·기뢰전함은 실제 자료 입력', 10, True), 0, wx.ALL, 18)
-        ref.Add(label(reference, '구축함 17–20   ·   호위함 15–18   ·   고속함 15–20   ·   지원함 12–15', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        ref.Add(label(reference, '구축함 17–20   ·   호위함 15–18   ·   고속함 15–20', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         reference.SetSizer(ref)
         s.Add(reference, 0, wx.EXPAND)
         p.SetupScrolling(scroll_x=False)
@@ -880,8 +880,8 @@ def smoke_test(frame, output):
                and frame.input_table.GetColumn(i).GetRenderer().centered
                for i in range(frame.input_table.GetColumnCount()))
     checks.append('Bold preview title and centered preview headers/cells: PASS')
-    assert frame.session.fitted.reference == '지원함'
-    assert frame.session.fitted.coefficients.set_index('함종').loc['지원함', 'D_T'] == 1.0
+    assert frame.session.fitted.reference == '구축함'
+    assert frame.session.fitted.coefficients.set_index('함종').loc['구축함', 'D_T'] == 1.0
     assert frame.estimate_button.IsEnabled()
     frame.ship_type.SetStringSelection('호위함')
     frame.estimate()
@@ -918,7 +918,7 @@ def smoke_test(frame, output):
     frame.graph_type.SetStringSelection('호위함')
     checks.append('Landing ship prediction, type comparison and 3D graph: PASS')
     checks.append('Comparison chart, 3D surface and log plane: PASS')
-    user_mix = pd.concat([data.query("함종 == '지원함'"),
+    user_mix = pd.concat([data.query("함종 == '상륙함'"),
                          data.query("함종 == '구축함'").head(4),
                          data.query("함종 == '호위함'").head(3)], ignore_index=True)
     frame.session.load(read_excel(BytesIO(workbook_bytes(user_mix))))
@@ -932,8 +932,8 @@ def smoke_test(frame, output):
     assert frame.result_table.GetItemCount() == 0
     frame.session.load(data)
     frame.refresh()
-    checks.append('Support 12 / destroyer 4 / frigate 3 joint fit, prediction and invalid replacement clearing: PASS')
-    for present in [['구축함', '호위함'], ['상륙함'], ['기뢰전함'], ['지원함', '기뢰전함'], ['지원함', '구축함']]:
+    checks.append('Landing 12 / destroyer 4 / frigate 3 joint fit, prediction and invalid replacement clearing: PASS')
+    for present in [['구축함', '호위함'], ['상륙함'], ['기뢰전함'], ['상륙함', '기뢰전함'], ['상륙함', '구축함']]:
         subset = data[data['함종'].isin(present)]
         frame.session.load(subset)
         frame.refresh()
@@ -949,7 +949,7 @@ def smoke_test(frame, output):
             frame.draw_graph()
     frame.session.load(data)
     frame.refresh()
-    checks.append('Absent types excluded from fit, prediction/comparison/3D selectors; automatic reference without support and single-type uploads: PASS')
+    checks.append('Absent types excluded from fit, prediction/comparison/3D selectors; automatic largest-type reference and single-type uploads: PASS')
     report = frame.session.report_bytes()
     assert len(pd.ExcelFile(BytesIO(report)).sheet_names) == 5
     replacement = data.copy()

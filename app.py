@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
-from model import COLUMNS, SHIP_TYPES, REFERENCE, example, fit, predict, validate
+from model import COLUMNS, SHIP_TYPES, example, fit, predict, validate
 from excel_io import read_excel, workbook_bytes
 from surface import mass_surface
 
@@ -10,9 +10,9 @@ st.title('함정 경하중량 회귀분석')
 st.latex(r'W_{LS}=K(LBH)^{\alpha}V_c^{\beta}D_T')
 st.caption('표기 kn은 knot(노트)와 같은 의미로 사용하며 수치 환산은 하지 않습니다. V_c는 순항속력(kn)입니다. 최대속력으로 추정했던 계수는 그대로 재사용하지 않고 순항속력 자료로 다시 학습해야 합니다.')
 st.write('단위: 경하중량 tonne · 길이/폭/깊이 m · 순항속력 kn. 깊이는 흘수와 구분하여 입력하세요.')
-st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 기준 함종은 지원함이며, 지원함이 없으면 자료가 가장 많은 함종을 자동 선택합니다.')
+st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 기준 함종은 자료가 가장 많은 함종을 자동 선택합니다.')
 with st.expander('순항속력 참고 범위 (사용자 제공 대략값)'):
-    st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함', '지원함'], '순항속력 (kn)': ['17–20', '15–18', '15–20', '12–15']}))
+    st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함'], '순항속력 (kn)': ['17–20', '15–18', '15–20']}))
     st.caption('참고 범위이며 자동 환산이나 입력 제한에 사용하지 않습니다. 실적선별 실제 순항속력을 입력하세요.')
 file = st.file_uploader('실적선 엑셀 업로드 (.xlsx)', type=['xlsx'])
 st.download_button('빈 엑셀 입력 양식 다운로드', workbook_bytes(pd.DataFrame(columns=COLUMNS)),
@@ -30,7 +30,7 @@ if file:
 else:
     st.warning('현재 표시된 자료는 기능 확인용 가상 자료입니다. 실제 함정의 계수나 성능을 나타내지 않습니다.')
     source = example()
-st.caption('첫 행은 열 이름이어야 합니다. 필수 열: ' + ', '.join(COLUMNS[1:]) + '. 함명은 선택 항목입니다. 함종: 구축함/호위함/고속함/지원함/상륙함/기뢰전함.')
+st.caption('첫 행은 열 이름이어야 합니다. 필수 열: ' + ', '.join(COLUMNS[1:]) + '. 함명은 선택 항목입니다. 함종: 구축함/호위함/고속함/상륙함/기뢰전함.')
 st.caption('단위: 경하중량 tonne, 길이·폭·깊이 m, 순항속력 kn. 빈 행은 제외합니다.')
 st.caption('자료가 늘어나면 기존 실적선과 새 실적선을 합친 엑셀을 업로드하거나 아래 표에 행을 추가하세요. 매번 전체 입력 자료로 다시 학습합니다. 중복 행은 의도치 않은 가중치가 되므로 제거하세요.')
 edited = st.data_editor(source, num_rows='dynamic', width='stretch',

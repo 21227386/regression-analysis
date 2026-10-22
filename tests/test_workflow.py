@@ -50,11 +50,11 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         fitted = session.fitted
         self.assertEqual(fitted.smearing, 1)
         expected = fitted.k*(100*15*8)**fitted.alpha*16**fitted.beta
-        value, _ = session.estimate('지원함', 100, 15, 8, 16)
+        value, _ = session.estimate(fitted.reference, 100, 15, 8, 16)
         self.assertAlmostEqual(value, expected)
         coefficients = pd.read_excel(BytesIO(session.report_bytes()), sheet_name='회귀계수')
         self.assertNotIn('S', coefficients.columns)
-        self.assertEqual(coefficients.loc[0, '기준함종'], '지원함')
+        self.assertEqual(coefficients.loc[0, '기준함종'], fitted.reference)
         self.assertIn('동시 추정', coefficients.loc[0, '추정방식'])
 
     def test_comparison_scope_and_undefined_r_squared(self):
@@ -70,7 +70,7 @@ class UncorrectedWorkflowTests(unittest.TestCase):
             self.assertEqual(set(rows['함종']), {kind})
             self.assertAlmostEqual(values['MAPE'], rows['오차율(%)'].abs().mean())
         self.assertIs(session.fitted, fitted)
-        session.load(example().query("함종 == '지원함'"))
+        session.load(example().query("함종 == '상륙함'"))
         self.assertEqual(session.comparison('호위함')[1], {})
         session.fitted.results = session.fitted.results.iloc[:1]
         self.assertTrue(np.isnan(session.comparison()[1]['R²']))

@@ -5,8 +5,7 @@ import pandas as pd
 
 COLUMNS = ['함명', '함종', '경하중량', '길이', '폭', '깊이', '순항속력']
 NUMERIC = COLUMNS[2:]
-SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함', '상륙함', '기뢰전함']
-REFERENCE = '지원함'
+SHIP_TYPES = ['구축함', '호위함', '고속함', '상륙함', '기뢰전함']
 
 @dataclass
 class Fit:
@@ -42,6 +41,8 @@ def validate(data):
         if df[col].isna().any() or df[col].astype(str).str.strip().eq('').any():
             raise ValueError(f'{col}: 빈 값을 허용하지 않습니다.')
         df[col] = df[col].astype(str).str.strip()
+    if '지원함' in df['함종'].values:
+        raise ValueError('지원함은 지원 대상 함종에서 삭제되었습니다. Excel에서 지원함 행을 제거한 뒤 다시 업로드하세요.')
     invalid = sorted(set(df['함종']) - set(SHIP_TYPES))
     if invalid:
         raise ValueError('허용되지 않은 함종: ' + ', '.join(invalid) + '. ' + ', '.join(SHIP_TYPES) + ' 중 하나를 입력하세요.')
@@ -57,7 +58,7 @@ def fit(data, reference=None, correction=False):
     types = sorted(df['함종'].unique())
     if reference is None:
         counts = df['함종'].value_counts()
-        reference = REFERENCE if REFERENCE in types else max(
+        reference = max(
             (typ for typ in SHIP_TYPES if typ in types), key=lambda typ: counts[typ])
     if reference not in types:
         raise ValueError(f'기준 함종 {reference}의 실적선 자료가 필요합니다.')
@@ -131,9 +132,9 @@ def example():
     """Synthetic demonstration only; not real ship data."""
     rng = np.random.default_rng(42)
     rows = []
-    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('지원함', 1.1), ('상륙함', 1.15), ('기뢰전함', .9)]:
+    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('상륙함', 1.15), ('기뢰전함', .9)]:
         for i in range(12):
-            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '지원함': (12,15), '상륙함': (12,18), '기뢰전함': (10,16)}[typ])
+            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '상륙함': (12,18), '기뢰전함': (10,16)}[typ])
             w = .035 * (l*b*h)**1.05 * v**.25 * factor * np.exp(rng.normal(0, .045))
             rows.append([f'{typ}-{i+1}', typ, w, l, b, h, v])
     return pd.DataFrame(rows, columns=COLUMNS)

@@ -10,9 +10,9 @@ class ExcelTests(unittest.TestCase):
         df = example().drop(columns='함명')
         loaded = read_excel(BytesIO(workbook_bytes(df)))
         result = fit(loaded)
-        self.assertEqual(result.reference, '지원함')
+        self.assertEqual(result.reference, '구축함')
         self.assertEqual(len(result.results), len(example()))
-        self.assertEqual(result.coefficients.set_index('함종').loc['지원함', 'D_T'], 1)
+        self.assertEqual(result.coefficients.set_index('함종').loc['구축함', 'D_T'], 1)
         np.testing.assert_allclose(result.results['예측중량'], fit(example()).results['예측중량'])
 
     def test_unknown_type_and_missing_reference(self):
@@ -54,3 +54,10 @@ class SpeedLabelTests(unittest.TestCase):
         book = load_workbook(BytesIO(workbook_bytes(frame)))
         self.assertIn('상륙함', book.active.data_validations.dataValidation[0].formula1)
         self.assertIn('기뢰전함', book.active.data_validations.dataValidation[0].formula1)
+        self.assertNotIn('지원함', book.active.data_validations.dataValidation[0].formula1)
+
+    def test_removed_support_type_is_rejected_with_migration_message(self):
+        frame = example()
+        frame.loc[0, '함종'] = '지원함'
+        with self.assertRaisesRegex(ValueError, '지원함 행을 제거'):
+            validate(read_excel(BytesIO(workbook_bytes(frame))))
