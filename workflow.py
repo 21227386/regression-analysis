@@ -3,7 +3,7 @@ from io import BytesIO
 import pandas as pd
 import numpy as np
 from model import SHIP_TYPES, COLUMNS, fit, predict, validate
-from excel_io import workbook_bytes
+from excel_io import EXCEL_HEADERS, workbook_bytes
 
 
 class EstimatorSession:
@@ -71,7 +71,7 @@ class EstimatorSession:
         fit_result = self.fitted
         out = BytesIO()
         with pd.ExcelWriter(out, engine='openpyxl') as writer:
-            self.data.rename(columns={'순항속력': '순항속력 (kn)'}).to_excel(writer, sheet_name='입력자료', index=False)
+            self.data.rename(columns=EXCEL_HEADERS).to_excel(writer, sheet_name='입력자료', index=False)
             pd.DataFrame([{'K': fit_result.k, 'alpha': fit_result.alpha, 'beta': fit_result.beta,
                            '기준함종': fit_result.reference, '속력기준': '순항속력 (kn)',
                            '추정방식': '전체 함종 로그 선형 최소제곱 동시 추정',

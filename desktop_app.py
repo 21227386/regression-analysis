@@ -17,7 +17,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg, NavigationToolbar2WxAgg
 from matplotlib import rcParams, font_manager
 
-from excel_io import read_excel, workbook_bytes
+from excel_io import EXCEL_HEADERS, read_excel, workbook_bytes
 from model import COLUMNS, SHIP_TYPES, example
 from workflow import EstimatorSession
 
@@ -284,7 +284,7 @@ class Table(dv.DataViewListCtrl):
             self.DeleteAllItems()
             self.ClearColumns()
             for name in frame.columns:
-                title = '순항속력 (kn)' if name == '순항속력' else str(name)
+                title = EXCEL_HEADERS.get(name, str(name))
                 width = {'함종': 72, 'D_T': 80, '실적선 수': 70}.get(str(name), 130)
                 column = dv.DataViewColumn('' if str(name) == 'D_T' else title,
                                            BilingualRenderer(self), self.GetColumnCount(), width=width)

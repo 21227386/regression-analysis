@@ -31,11 +31,11 @@ class ExcelTests(unittest.TestCase):
         self.assertEqual(len(read_excel(BytesIO(buf.getvalue()), '자료')), len(df))
 
 class SpeedLabelTests(unittest.TestCase):
-    def test_not_template_header_and_roundtrip(self):
+    def test_unit_template_headers_and_roundtrip(self):
         from openpyxl import load_workbook
         content = workbook_bytes(example())
         book = load_workbook(BytesIO(content), read_only=True)
-        self.assertIn('순항속력 (kn)', next(book.active.values))
+        self.assertEqual(list(next(book.active.values)), ['함명', '함종', '경하 중량(Tonne)', '길이(m)', '폭(m)', '깊이(m)', '순항 속도(knot)'])
         loaded = read_excel(BytesIO(content))
         self.assertIn('순항속력', loaded.columns)
         np.testing.assert_allclose(loaded['순항속력'], example()['순항속력'])

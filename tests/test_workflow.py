@@ -84,7 +84,7 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         self.assertEqual(len(rows), 12)
         self.assertTrue(np.isfinite(metrics['MAE']))
         book = pd.ExcelFile(BytesIO(session.report_bytes()))
-        self.assertIn('순항속력 (kn)', pd.read_excel(book, sheet_name='입력자료').columns)
+        self.assertIn('순항 속도(knot)', pd.read_excel(book, sheet_name='입력자료').columns)
         self.assertIn('상륙함', pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist())
         self.assertIn('상륙함', pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist())
         self.assertEqual(pd.read_excel(book, sheet_name='회귀계수').loc[0, '속력기준'], '순항속력 (kn)')
