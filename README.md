@@ -1,6 +1,12 @@
 # 함정 경하중량 회귀분석
 
-Windows 실행파일은 이 저장소의 GitHub Releases에 배포합니다. 최신 버전은 순항속력(not) 입력을 사용하며 not는 knot(노트)와 같은 의미의 표기입니다.
+## Windows 실행파일 다운로드
+
+[ShipRegression_CruiseSpeed_not.exe 다운로드](https://github.com/21227386/regression-analysis/raw/refs/heads/main/downloads/ShipRegression_CruiseSpeed_not.exe) — 약 100MB
+
+다운로드 후 EXE를 더블클릭하세요. Python 설치나 수동 압축 해제 없이 첫 실행 시 필요한 파일을 자동으로 준비합니다. Windows 10/11 64비트용입니다.
+
+최신 버전은 순항속력(not) 입력을 사용하며 not는 knot(노트)와 같은 의미의 표기입니다. 실제 Windows PC에서의 최종 실행은 사용자가 확인할 예정입니다.
 
 업로드된 식 `W_LS = K (L B H)^α V^β D_T`의 계수를 실적선 자료로 추정하는 Streamlit 프로그램입니다.
 
