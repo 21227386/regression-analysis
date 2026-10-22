@@ -25,12 +25,11 @@ NAVY = '#142D4E'
 BG = '#F3F6FA'
 INK = '#18324F'
 ACCENT = '#007B8A'
-FONT = Path(__file__).resolve().parent / 'assets' / 'fonts' / 'NanumGothic-Regular.ttf'
-if FONT.exists():
-    font_manager.fontManager.addfont(str(FONT))
+for font_path in (Path(__file__).resolve().parent / 'assets/fonts').glob('NanumGothic-*.ttf'):
+    font_manager.fontManager.addfont(str(font_path))
     if sys.platform == 'win32':
         import ctypes
-        ctypes.windll.gdi32.AddFontResourceExW(str(FONT), 0x10, 0)
+        ctypes.windll.gdi32.AddFontResourceExW(str(font_path), 0x10, 0)
 ENGLISH_FONT = 'Times New Roman'
 # Windows supplies Times New Roman; keep Korean glyph fallback without redistributing Microsoft fonts.
 windows_fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
@@ -251,8 +250,9 @@ class Workspace(wx.Simplebook):
 
 
 class BilingualRenderer(dv.DataViewCustomRenderer):
-    def __init__(self, window):
-        super().__init__('string', dv.DATAVIEW_CELL_INERT, wx.ALIGN_LEFT)
+    def __init__(self, window, centered=False):
+        super().__init__('string', dv.DATAVIEW_CELL_INERT, wx.ALIGN_CENTER if centered else wx.ALIGN_LEFT)
+        self.centered = centered
         self.window = window
         self.value = ''
 
@@ -268,14 +268,16 @@ class BilingualRenderer(dv.DataViewCustomRenderer):
 
     def Render(self, rect, dc, state):
         fg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHTTEXT) if state & dv.DATAVIEW_CELL_SELECTED else wx.Colour(INK)
-        _, h = mixed_extent(dc, self.value, self.window.GetFont())
-        mixed_draw(dc, self.value, self.window.GetFont(), rect.x+3, rect.y+max(0, (rect.height-h)//2), fg)
+        w, h = mixed_extent(dc, self.value, self.window.GetFont())
+        x = rect.x + max(0, (rect.width-w)//2) if self.centered else rect.x+3
+        mixed_draw(dc, self.value, self.window.GetFont(), x, rect.y+max(0, (rect.height-h)//2), fg)
         return True
 
 
 class Table(dv.DataViewListCtrl):
-    def __init__(self, parent):
+    def __init__(self, parent, centered=False):
         super().__init__(parent, style=dv.DV_ROW_LINES | dv.DV_VERT_RULES)
+        self.centered = centered
         self.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
 
     def show_frame(self, frame):
@@ -287,7 +289,8 @@ class Table(dv.DataViewListCtrl):
                 title = EXCEL_HEADERS.get(name, str(name))
                 width = {'함종': 72, 'D_T': 80, '실적선 수': 70}.get(str(name), 130)
                 column = dv.DataViewColumn('' if str(name) == 'D_T' else title,
-                                           BilingualRenderer(self), self.GetColumnCount(), width=width)
+                                           BilingualRenderer(self, self.centered), self.GetColumnCount(), width=width,
+                                           align=wx.ALIGN_CENTER if self.centered else wx.ALIGN_LEFT)
                 if str(name) == 'D_T':
                     column.SetBitmap(wx.BitmapBundle.FromBitmap(symbol_bitmap('DT', size=(28, 20))))
                 self.AppendColumn(column)
@@ -435,12 +438,13 @@ class EstimatorFrame(wx.Frame):
         data_card = Card(p)
         ds = wx.BoxSizer(wx.VERTICAL)
         head = wx.BoxSizer(wx.HORIZONTAL)
-        head.Add(label(data_card, '실적함 데이터 미리보기', 12, True), 1, wx.ALIGN_CENTER_VERTICAL)
+        self.preview_heading = label(data_card, '실적함 데이터 미리보기', 14, True)
+        head.Add(self.preview_heading, 1, wx.ALIGN_CENTER_VERTICAL)
         head.Add(button(data_card, '입력자료 저장', self.save_input))
         ds.Add(head, 0, wx.EXPAND | wx.ALL, 18)
         self.counts = label(data_card, 'Input File Upload로 Excel 파일을 불러오세요.', 9, color='#6F8398')
         ds.Add(self.counts, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
-        self.input_table = Table(data_card)
+        self.input_table = Table(data_card, centered=True)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
         ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
         ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   지원함 포함 · 전체 함종 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
@@ -855,6 +859,11 @@ def smoke_test(frame, output):
     frame.refresh()
     assert frame.session.fitted is not None
     assert frame.input_table.GetItemCount() == len(data)
+    assert frame.preview_heading.GetFont().GetWeight() == wx.FONTWEIGHT_BOLD
+    assert all(frame.input_table.GetColumn(i).GetAlignment() == wx.ALIGN_CENTER
+               and frame.input_table.GetColumn(i).GetRenderer().centered
+               for i in range(frame.input_table.GetColumnCount()))
+    checks.append('Bold preview title and centered preview headers/cells: PASS')
     assert frame.session.fitted.reference == '지원함'
     assert frame.session.fitted.coefficients.set_index('함종').loc['지원함', 'D_T'] == 1.0
     assert frame.estimate_button.IsEnabled()

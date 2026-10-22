@@ -35,7 +35,7 @@ Windows 데스크톱 GUI에서 실적함 엑셀로 회귀계수를 산출하고,
 
 Windows 10/11 64비트용입니다. 첫 실행에서 필요한 파일을 사용자 LocalAppData에 자동 준비하고, 다음 실행부터 재사용합니다. PowerShell이나 Python 설치, 인터넷 연결, 웹서버가 필요하지 않습니다. 약 512MB 이상의 디스크 여유 공간을 확보하세요.
 
-새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v10`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
+새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v11`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
 
 ## 소스로 실행
 
@@ -86,3 +86,7 @@ K, alpha, beta 및 D_T 표시는 수학 기호 이미지로 제공하고 한글 
 ### v10 그래프 함명
 
 Insights & 3D의 실적/예측 비교 점과 3D 곡면/로그 공간 평면의 실적 점 옆에 함명을 표시합니다. 3D 회전 시에도 이름은 해당 점에 붙어 있습니다. 자료가 많아 겹칠 때는 상단의 함명 표시 선택을 해제할 수 있습니다. 그래프 이미지 저장에도 표시 상태가 반영됩니다.
+
+### v11 입력 미리보기 정렬
+
+실적함 데이터 미리보기 제목을 14pt 볼드로 강조하고, 표의 모든 열 제목과 셀을 중앙 정렬했습니다. 한글 볼드 표시에 NanumGothic Bold를 함께 제공합니다(OFL).
