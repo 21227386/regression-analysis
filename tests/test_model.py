@@ -95,3 +95,30 @@ class CruiseSpeedTests(unittest.TestCase):
         a = predict(fitted, '호위함', 100, 15, 8, 15)
         b = predict(fitted, '호위함', 100, 15, 8, 18)
         self.assertAlmostEqual(b/a, (18/15)**fitted.beta)
+
+class AvailableTypeTests(unittest.TestCase):
+    def test_every_nonempty_type_combination(self):
+        from itertools import combinations
+        from model import SHIP_TYPES
+        data = example()
+        for count in range(1, len(SHIP_TYPES) + 1):
+            for present in combinations(SHIP_TYPES, count):
+                with self.subTest(present=present):
+                    result = fit(data[data['함종'].isin(present)])
+                    self.assertEqual(set(result.coefficients['함종']), set(present))
+                    self.assertEqual(result.n_parameters, count + 2)
+                    self.assertEqual(result.reference, '지원함' if '지원함' in present else present[0])
+                    self.assertEqual(result.coefficients.set_index('함종').loc[result.reference, 'D_T'], 1)
+                    self.assertTrue(np.isfinite(result.results['예측중량']).all())
+
+    def test_fallback_uses_largest_present_type_and_is_order_independent(self):
+        data = example().query("함종 != '지원함'")
+        data = data.drop(data.query("함종 == '구축함'").index[:9])
+        data = data.drop(data.query("함종 == '호위함'").index[:8])
+        data = data.drop(data.query("함종 == '고속함'").index[:6])
+        first, shuffled = fit(data), fit(data.sample(frac=1, random_state=1))
+        self.assertEqual(first.reference, '상륙함')
+        self.assertEqual(shuffled.reference, first.reference)
+        np.testing.assert_allclose([first.k, first.alpha, first.beta], [shuffled.k, shuffled.alpha, shuffled.beta])
+        fixed = fit(data, reference='호위함')
+        np.testing.assert_allclose(first.results['예측중량'], fixed.results['예측중량'])

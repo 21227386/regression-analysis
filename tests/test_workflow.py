@@ -88,3 +88,15 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         self.assertIn('상륙함', pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist())
         self.assertIn('상륙함', pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist())
         self.assertEqual(pd.read_excel(book, sheet_name='회귀계수').loc[0, '속력기준'], '순항속력 (kn)')
+
+    def test_absent_types_excluded_from_report_and_cannot_be_predicted(self):
+        session = EstimatorSession()
+        session.load(example().query("함종 == '상륙함'"))
+        self.assertEqual(session.fitted.reference, '상륙함')
+        self.assertGreater(session.estimate('상륙함', 100, 15, 8, 16)[0], 0)
+        with self.assertRaisesRegex(ValueError, '없는 함종'):
+            session.estimate('지원함', 100, 15, 8, 16)
+        book = pd.ExcelFile(BytesIO(session.report_bytes()))
+        self.assertEqual(pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist(), ['상륙함'])
+        self.assertEqual(pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist(), ['전체 함종', '상륙함'])
+        self.assertEqual(pd.read_excel(book, sheet_name='회귀계수').loc[0, '기준함종'], '상륙함')

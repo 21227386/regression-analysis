@@ -10,7 +10,7 @@ st.title('함정 경하중량 회귀분석')
 st.latex(r'W_{LS}=K(LBH)^{\alpha}V_c^{\beta}D_T')
 st.caption('표기 kn은 knot(노트)와 같은 의미로 사용하며 수치 환산은 하지 않습니다. V_c는 순항속력(kn)입니다. 최대속력으로 추정했던 계수는 그대로 재사용하지 않고 순항속력 자료로 다시 학습해야 합니다.')
 st.write('단위: 경하중량 tonne · 길이/폭/깊이 m · 순항속력 kn. 깊이는 흘수와 구분하여 입력하세요.')
-st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 지원함 D_T=1입니다.')
+st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 기준 함종은 지원함이며, 지원함이 없으면 자료가 가장 많은 함종을 자동 선택합니다.')
 with st.expander('순항속력 참고 범위 (사용자 제공 대략값)'):
     st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함', '지원함'], '순항속력 (kn)': ['17–20', '15–18', '15–20', '12–15']}))
     st.caption('참고 범위이며 자동 환산이나 입력 제한에 사용하지 않습니다. 실적선별 실제 순항속력을 입력하세요.')
@@ -40,18 +40,18 @@ try:
     data = validate(edited)
     st.download_button('현재 학습자료 엑셀 저장', workbook_bytes(data), 'training_data.xlsx',
                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    reference = REFERENCE
     absent = [t for t in SHIP_TYPES if t not in data['함종'].unique()]
     if absent:
         st.warning('자료가 없어 설계계수를 추정할 수 없는 함종: ' + ', '.join(absent))
     correction = st.checkbox('로그 역변환 편향 보정 적용 (Duan smearing)', value=False,
                              help='전체 자료의 잔차로 보정배율 S를 추정합니다. 최종 식은 S·K·(LBH)^α·V^β·D_T입니다.')
-    fitted = fit(data, reference, correction)
+    fitted = fit(data, correction=correction)
+    reference = fitted.reference
 except ValueError as exc:
     st.error(str(exc))
     st.stop()
 st.subheader('산출 계수')
-st.caption('전체 함종의 자료로 K, α, β와 함종별 D_T를 동시에 추정합니다. 지원함 D_T는 1로 유지합니다.')
+st.caption(f'자료가 있는 함종으로 K, α, β와 D_T를 동시에 추정합니다. 기준 함종 {reference}의 D_T는 1입니다.')
 st.dataframe(pd.DataFrame({'K': [fitted.k], 'α': [fitted.alpha], 'β': [fitted.beta], '보정배율 S': [fitted.smearing]}), hide_index=True)
 st.dataframe(fitted.coefficients, hide_index=True)
 if fitted.condition > 30:

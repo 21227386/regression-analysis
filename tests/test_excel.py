@@ -20,7 +20,10 @@ class ExcelTests(unittest.TestCase):
         df.loc[0, '함종'] = '기타'
         with self.assertRaisesRegex(ValueError, '허용되지 않은 함종'): validate(df)
         df = example().query("함종 != '지원함'")
-        with self.assertRaisesRegex(ValueError, '지원함'): fit(df)
+        fitted = fit(df)
+        self.assertNotIn('지원함', fitted.coefficients['함종'].values)
+        self.assertEqual(fitted.reference, '구축함')
+        with self.assertRaisesRegex(ValueError, '지원함'): fit(df, reference='지원함')
 
     def test_select_sheet_and_blank_rows(self):
         buf = BytesIO()

@@ -447,7 +447,7 @@ class EstimatorFrame(wx.Frame):
         self.input_table = Table(data_card, centered=True)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
         ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
-        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   지원함 포함 · 전체 함종 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
+        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   자료가 있는 함종만 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
         data_card.SetSizer(ds)
         s.Add(data_card, 1, wx.EXPAND)
 
@@ -464,7 +464,8 @@ class EstimatorFrame(wx.Frame):
         equation = wx.Image(str(equation_path)).Scale(570, 83, wx.IMAGE_QUALITY_HIGH)
         self.equation_bitmap = wx.StaticBitmap(intro, bitmap=wx.Bitmap(equation))
         info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
-        info.Add(label(intro, 'Vc: 순항속력(kn)    |    기준 함종: 지원함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        self.model_reference = label(intro, 'Vc: 순항속력(kn)    |    기준 함종: 데이터 업로드 후 결정', 9, color='#7A8DA2')
+        info.Add(self.model_reference, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
         info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         intro.SetSizer(info)
@@ -700,6 +701,17 @@ class EstimatorFrame(wx.Frame):
         self.notice.SetForegroundColour('#955200' if self.synthetic else INK)
         self.clear_prediction()
         self.estimate_button.Enable(fitted is not None)
+        available = [typ for typ in SHIP_TYPES if data is not None and typ in data['함종'].values]
+        for control, choices in [(self.ship_type, available), (self.graph_type, available),
+                                 (self.comparison_scope, ['전체 함종'] + available)]:
+            previous = control.GetStringSelection()
+            control.SetItems(choices)
+            selected = previous if previous in choices else (fitted.reference if fitted and control != self.comparison_scope else (choices[0] if choices else ''))
+            if selected:
+                control.SetStringSelection(selected)
+            control.Enable(bool(choices))
+        self.model_reference.SetLabel('Vc: 순항속력(kn)    |    기준 함종: ' +
+                                      (f'{fitted.reference}(설계계수 1)' if fitted else '데이터 업로드 후 결정'))
         if data is not None:
             self.input_table.show_frame(data)
             counts = data['함종'].value_counts()
@@ -717,6 +729,7 @@ class EstimatorFrame(wx.Frame):
             for field in self.coefficient_values.values():
                 field.SetLabel('—')
             self.metrics.SetLabel('')
+            self.model_warning.SetLabel('자료가 있는 함종만 계산합니다. 학습자료 오차는 독립 검증 성능이 아닙니다.')
             self.dt_table.show_frame(pd.DataFrame(columns=['함종', 'D_T', '실적선 수']))
             self.result_table.show_frame(pd.DataFrame())
             self.prediction_detail.SetLabel(self.session.issue)
@@ -728,6 +741,9 @@ class EstimatorFrame(wx.Frame):
             self.refresh_comparison()
             warnings = [f'전체 {len(data)}척 동시 추정 · 추정계수 {fitted.n_parameters}개 · 잔차 자유도 {fitted.residual_df}.',
                         '학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
+            absent = [typ for typ in SHIP_TYPES if typ not in available]
+            if absent:
+                warnings.append('자료 없음 · 계산 제외: ' + ', '.join(absent) + '.')
             if fitted.residual_df < 5:
                 warnings.append('잔차 자유도가 작아 계수가 불안정할 수 있습니다.')
             if fitted.condition > 30:
@@ -917,6 +933,23 @@ def smoke_test(frame, output):
     frame.session.load(data)
     frame.refresh()
     checks.append('Support 12 / destroyer 4 / frigate 3 joint fit, prediction and invalid replacement clearing: PASS')
+    for present in [['구축함', '호위함'], ['상륙함'], ['지원함', '구축함']]:
+        subset = data[data['함종'].isin(present)]
+        frame.session.load(subset)
+        frame.refresh()
+        assert frame.session.fitted is not None
+        assert set(frame.ship_type.GetStrings()) == set(present)
+        assert set(frame.graph_type.GetStrings()) == set(present)
+        assert set(frame.comparison_scope.GetStrings()) == {'전체 함종', *present}
+        assert frame.session.fitted.reference in frame.model_reference.GetLabel()
+        frame.estimate()
+        assert '—' not in frame.prediction.GetLabel()
+        for mode in [0, 1, 2]:
+            frame.graph_mode.SetSelection(mode)
+            frame.draw_graph()
+    frame.session.load(data)
+    frame.refresh()
+    checks.append('Absent types excluded from fit, prediction/comparison/3D selectors; automatic reference without support and single-type uploads: PASS')
     report = frame.session.report_bytes()
     assert len(pd.ExcelFile(BytesIO(report)).sheet_names) == 5
     replacement = data.copy()

@@ -52,9 +52,13 @@ def validate(data):
     return df
 
 
-def fit(data, reference=REFERENCE, correction=False):
+def fit(data, reference=None, correction=False):
     df = validate(data)
     types = sorted(df['함종'].unique())
+    if reference is None:
+        counts = df['함종'].value_counts()
+        reference = REFERENCE if REFERENCE in types else max(
+            (typ for typ in SHIP_TYPES if typ in types), key=lambda typ: counts[typ])
     if reference not in types:
         raise ValueError(f'기준 함종 {reference}의 실적선 자료가 필요합니다.')
     others = [t for t in types if t != reference]

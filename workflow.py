@@ -79,7 +79,7 @@ class EstimatorSession:
             fit_result.coefficients.to_excel(writer, sheet_name='함종별_DT', index=False)
             fit_result.results.to_excel(writer, sheet_name='실적함_비교', index=False)
             pd.DataFrame([{'조회 범위': scope, '척수': len(self.comparison(scope)[0]), **self.comparison(scope)[1]}
-                          for scope in ['전체 함종'] + SHIP_TYPES]).to_excel(
+                          for scope in ['전체 함종'] + [typ for typ in SHIP_TYPES if typ in fit_result.coefficients['함종'].values]]).to_excel(
                               writer, sheet_name='학습자료_적합지표', index=False)
             for sheet in writer.book:
                 sheet.freeze_panes = 'A2'
