@@ -501,15 +501,28 @@ class EstimatorFrame(wx.Frame):
         compare = Card(p)
         cs = wx.BoxSizer(wx.VERTICAL)
         title_row = wx.BoxSizer(wx.HORIZONTAL)
-        title_row.Add(label(compare, '실적 중량 비교', 12, True), 1, wx.ALIGN_CENTER_VERTICAL)
+        title_row.Add(label(compare, '실적 중량 비교', 15, True), 1, wx.ALIGN_CENTER_VERTICAL)
         self.comparison_scope = wx.Choice(compare, choices=['전체 함종'] + SHIP_TYPES)
         self.comparison_scope.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName='NanumGothic'))
         self.comparison_scope.SetSelection(0)
         self.comparison_scope.Bind(wx.EVT_CHOICE, self.refresh_comparison)
         title_row.Add(self.comparison_scope, 0)
         cs.Add(title_row, 0, wx.EXPAND | wx.ALL, 18)
-        self.metrics = label(compare, '회귀모형을 추정하면 적합 지표가 표시됩니다.', 10, True)
+        self.metrics = label(compare, '회귀모형을 추정하면 적합 지표가 표시됩니다.', 13, True)
         cs.Add(self.metrics, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        metric_grid = wx.GridSizer(rows=2, cols=2, vgap=10, hgap=12)
+        self.metric_values = {}
+        for name, unit in [('MAE', 'tonne'), ('RMSE', 'tonne'), ('MAPE', '%'), ('R²', '')]:
+            tile = wx.Panel(compare)
+            tile.SetBackgroundColour('#F1F6FA')
+            layout = wx.BoxSizer(wx.VERTICAL)
+            layout.Add(label(tile, name, 11, True, '#61788F'), 0, wx.LEFT | wx.RIGHT | wx.TOP, 10)
+            value = label(tile, '—' + (' ' + unit if unit else ''), 19, True, ACCENT)
+            self.metric_values[name] = value
+            layout.Add(value, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+            tile.SetSizer(layout)
+            metric_grid.Add(tile, 1, wx.EXPAND)
+        cs.Add(metric_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         explanations = [
             'MAE (Mean Absolute Error): 평균 절대오차 · tonne',
             'RMSE (Root Mean Squared Error): 제곱평균제곱근오차 · tonne',
@@ -518,9 +531,11 @@ class EstimatorFrame(wx.Frame):
             'MAE / RMSE / MAPE는 작을수록 좋습니다. R²는 음수일 수 있으며,',
             '자료가 1척이거나 실적 중량이 모두 같으면 R²를 산출할 수 없습니다.'
         ]
+        explanation_layout = wx.BoxSizer(wx.VERTICAL)
         for explanation in explanations:
-            cs.Add(label(compare, explanation, 9, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18 if explanation == explanations[-1] else 6)
-        self.model_warning = label(compare, '학습자료에 대한 적합 오차이며 독립 검증 성능이 아닙니다.', 9, color='#A37B35')
+            explanation_layout.Add(label(compare, explanation, 8, color='#6F8398'), 0, wx.BOTTOM, 6)
+        cs.Add(explanation_layout, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        self.model_warning = label(compare, '학습자료에 대한 적합 오차이며 독립 검증 성능이 아닙니다.', 8, color='#A37B35')
         cs.Add(self.model_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         self.result_table = Table(compare)
         self.result_table.SetMinSize((-1, 220))
@@ -728,7 +743,7 @@ class EstimatorFrame(wx.Frame):
             self.coefficients.SetLabel(self.session.issue)
             for field in self.coefficient_values.values():
                 field.SetLabel('—')
-            self.metrics.SetLabel('')
+            self.refresh_comparison()
             self.model_warning.SetLabel('자료가 있는 함종만 계산합니다. 학습자료 오차는 독립 검증 성능이 아닙니다.')
             self.dt_table.show_frame(pd.DataFrame(columns=['함종', 'D_T', '실적선 수']))
             self.result_table.show_frame(pd.DataFrame())
@@ -762,13 +777,12 @@ class EstimatorFrame(wx.Frame):
         scope = self.comparison_scope.GetStringSelection()
         rows, metrics = self.session.comparison(scope)
         self.result_table.show_frame(rows)
-        if not metrics:
-            text = f'{scope}: 비교할 자료가 없습니다.'
-        else:
-            values = [f'{key}: {value:.4g}' + (' tonne' if key in ['MAE', 'RMSE'] else '%' if key == 'MAPE' else '') if np.isfinite(value) else f'{key}: 산출 불가'
-                      for key, value in metrics.items()]
-            text = f'{scope} · {len(rows)}척\n' + '   |   '.join(values[:2]) + '\n' + '   |   '.join(values[2:])
-        self.metrics.SetLabel(text)
+        self.metrics.SetLabel(f'{scope} : {len(rows)}척' if metrics else f'{scope} : 비교할 자료가 없습니다.')
+        for key, control in self.metric_values.items():
+            value = metrics.get(key)
+            unit = ' tonne' if key in ['MAE', 'RMSE'] else ' %' if key == 'MAPE' else ''
+            text = '—' if value is None else f'{value:,.4g}' + unit if np.isfinite(value) else '산출 불가'
+            control.SetLabel(text)
         self.model_panel.Layout()
         self.model_panel.FitInside()
 
@@ -892,6 +906,10 @@ def smoke_test(frame, output):
         frame.refresh_comparison()
         assert frame.result_table.GetItemCount() == (len(data) if scope == '전체 함종' else 12)
         assert scope in frame.metrics.GetLabel()
+        values = frame.session.comparison(scope)[1]
+        assert all(f'{values[key]:,.4g}' in control.GetLabel()
+                   for key, control in frame.metric_values.items())
+        assert all(control.GetFont().GetPointSize() >= 18 for control in frame.metric_values.values())
         assert frame.session.fitted is fitted_before
     frame.comparison_scope.SetSelection(0)
     frame.refresh_comparison()
