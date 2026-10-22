@@ -41,3 +41,16 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError): session.load(invalid)
         self.assertIs(session.fitted, previous)
         self.assertEqual(len(session.data), 48)
+
+class UncorrectedWorkflowTests(unittest.TestCase):
+    def test_no_bias_option_or_exported_s_and_base_equation(self):
+        session = EstimatorSession()
+        self.assertFalse(hasattr(session, 'correction'))
+        session.load(example())
+        fitted = session.fitted
+        self.assertEqual(fitted.smearing, 1)
+        expected = fitted.k*(100*15*8)**fitted.alpha*16**fitted.beta
+        value, _ = session.estimate('호위함', 100, 15, 8, 16)
+        self.assertAlmostEqual(value, expected)
+        coefficients = pd.read_excel(BytesIO(session.report_bytes()), sheet_name='회귀계수')
+        self.assertNotIn('S', coefficients.columns)

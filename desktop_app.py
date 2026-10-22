@@ -43,9 +43,45 @@ def label(parent, text, size=10, bold=False, color=INK):
     return item
 
 
+class ElevatedButton(buttons.GenButton):
+    def InitOtherEvents(self):
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+
+    def OnPaint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        width, height = self.GetClientSize()
+        gc = wx.GraphicsContext.Create(dc)
+        base = self.GetBackgroundColour()
+        def shade(amount):
+            return wx.Colour(*[max(0, min(255, int(channel + amount))) for channel in (base.Red(), base.Green(), base.Blue())])
+        down = not self.up
+        y = 3 if down else 1
+        gc.SetPen(wx.TRANSPARENT_PEN)
+        gc.SetBrush(wx.Brush(wx.Colour(30, 57, 77, 65 if self.IsEnabled() else 25)))
+        gc.DrawRoundedRectangle(2, 4, max(width-4, 1), max(height-5, 1), 7)
+        top, bottom = (shade(-10), shade(12)) if down else (shade(19), shade(-10))
+        if not self.IsEnabled():
+            top = bottom = wx.Colour('#E6EBF0')
+        gc.SetBrush(gc.CreateLinearGradientBrush(0, y, 0, height-5, top, bottom))
+        gc.SetPen(wx.Pen(shade(-28) if self.IsEnabled() else '#D5DEE7', 1))
+        gc.DrawRoundedRectangle(1, y, max(width-4, 1), max(height-6, 1), 7)
+        fg = self.GetForegroundColour() if self.IsEnabled() else wx.Colour('#95A4B3')
+        gc.SetFont(self.GetFont(), fg)
+        dc.SetFont(self.GetFont())
+        tw, th = gc.GetTextExtent(self.GetLabel())[:2]
+        gc.DrawText(self.GetLabel(), (width-tw)/2 + int(down), (height-th)/2 - 1 + int(down))
+        if self.hasFocus and self.IsEnabled():
+            dc.SetBrush(wx.TRANSPARENT_BRUSH)
+            dc.SetPen(wx.Pen('#93C8D0', 1, wx.PENSTYLE_DOT))
+            dc.DrawRoundedRectangle(5, 5, max(width-12, 1), max(height-13, 1), 4)
+
+
 def button(parent, text, callback, kind='secondary'):
-    item = buttons.GenButton(parent, label=text, style=wx.BORDER_NONE)
-    item.SetBezelWidth(0)
+    item = ElevatedButton(parent, label=text, style=wx.BORDER_NONE)
+    item.SetBezelWidth(2)
+    item.SetUseFocusIndicator(True)
     font = item.GetFont()
     font.SetPointSize(10)
     font.SetWeight(wx.FONTWEIGHT_BOLD)
@@ -53,7 +89,10 @@ def button(parent, text, callback, kind='secondary'):
     base, hover, fg = ('#087F8C', '#066C78', '#FFFFFF') if kind == 'primary' else ('#EAF0F6', '#DCE7F0', '#284660')
     item.SetBackgroundColour(base)
     item.SetForegroundColour(fg)
-    width = item.GetTextExtent(text).width + 34
+    measurement_dc = wx.ClientDC(item)
+    measure = wx.GraphicsContext.Create(measurement_dc)
+    measure.SetFont(font, wx.Colour(fg))
+    width = int(measure.GetTextExtent(text)[0]) + 40
     item.SetMinSize((width, 42))
     item.Bind(wx.EVT_BUTTON, callback)
     def enter(event):
@@ -146,6 +185,9 @@ class EstimatorFrame(wx.Frame):
         for index, (number, name) in enumerate(titles):
             nav = buttons.GenButton(sidebar, label=f'{number}   {name}', style=wx.BORDER_NONE)
             nav.SetBezelWidth(0)
+            nav_font = nav.GetFont()
+            nav_font.SetWeight(wx.FONTWEIGHT_BOLD)
+            nav.SetFont(nav_font)
             nav.SetMinSize((186, 48))
             nav.SetForegroundColour('#B9CBE0')
             nav.SetBackgroundColour(NAVY)
@@ -168,7 +210,11 @@ class EstimatorFrame(wx.Frame):
         heading.Add(title_group, 1)
         self.state = label(content, '●  NO DATA', 10, True, '#7D8DA0')
         self.state.SetMinSize((160, -1))
-        heading.Add(self.state, 0, wx.ALIGN_CENTER_VERTICAL)
+        heading.Add(self.state, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 14)
+        image_path = Path(__file__).resolve().parent / 'assets/images/ship_weight_illustration.png'
+        image = wx.Image(str(image_path)).Scale(252, 84, wx.IMAGE_QUALITY_HIGH)
+        self.header_illustration = wx.StaticBitmap(content, bitmap=wx.Bitmap(image))
+        heading.Add(self.header_illustration, 0, wx.ALIGN_CENTER_VERTICAL)
         body.Add(heading, 0, wx.EXPAND | wx.ALL, 24)
         self.notice = label(content, self.source_text, 10, color='#6F8398')
         body.Add(self.notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
@@ -181,7 +227,17 @@ class EstimatorFrame(wx.Frame):
         content.SetSizer(body)
         layout.Add(content, 1, wx.EXPAND)
         panel.SetSizer(layout)
-        self.CreateStatusBar()
+        status = self.CreateStatusBar(2)
+        status.SetStatusWidths([-1, 440])
+        self.copyright = label(status, 'Copyright by Naval Ship Design Technology Division', 8, color='#6F8398')
+        self.copyright.SetWindowStyleFlag(wx.ALIGN_RIGHT | wx.ST_NO_AUTORESIZE)
+        def position_copyright(event=None):
+            rect = status.GetFieldRect(1)
+            self.copyright.SetSize(rect.x+4, rect.y+2, max(rect.width-16, 0), max(rect.height-3, 0))
+            if event:
+                event.Skip()
+        status.Bind(wx.EVT_SIZE, position_copyright)
+        wx.CallAfter(position_copyright)
         self.SetStatusText('순항속력 not = knot(노트)  ·  중량 tonne  ·  치수 m')
         self.select_page(0)
         self.Centre()
@@ -254,17 +310,18 @@ class EstimatorFrame(wx.Frame):
         top.Add(label(intro, 'Regression Model', 16, True), 1, wx.ALIGN_CENTER_VERTICAL)
         top.Add(button(intro, '분석 결과 Excel 저장', self.save_report))
         info.Add(top, 0, wx.EXPAND | wx.ALL, 20)
-        info.Add(label(intro, 'W = S × K × (L×B×H)^alpha × Vc^beta × D_T    |    호위함 D_T = 1', 11, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
-        self.correction = wx.CheckBox(intro, label='로그 역변환 편향 보정(S) 적용')
-        self.correction.Bind(wx.EVT_CHECKBOX, self.change_correction)
-        info.Add(self.correction, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        equation_path = Path(__file__).resolve().parent / 'assets/images/regression_equation.png'
+        equation = wx.Image(str(equation_path)).Scale(570, 83, wx.IMAGE_QUALITY_HIGH)
+        self.equation_bitmap = wx.StaticBitmap(intro, bitmap=wx.Bitmap(equation))
+        info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 호위함, D_T = 1', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
         info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         intro.SetSizer(info)
         s.Add(intro, 0, wx.EXPAND | wx.BOTTOM, 18)
         tiles = wx.BoxSizer(wx.HORIZONTAL)
         self.coefficient_values = {}
-        for name, description in [('K', '기본 회귀계수'), ('alpha', '크기 지수'), ('beta', '속력 지수'), ('S', '편향 보정배율')]:
+        for name, description in [('K', '기본 회귀계수'), ('alpha', '크기 지수'), ('beta', '속력 지수')]:
             tile = Card(p)
             ts = wx.BoxSizer(wx.VERTICAL)
             ts.Add(label(tile, name + '  /  ' + description, 9, color='#7A8DA2'), 0, wx.LEFT | wx.TOP, 16)
@@ -272,7 +329,7 @@ class EstimatorFrame(wx.Frame):
             ts.Add(value, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 16)
             self.coefficient_values[name] = value
             tile.SetSizer(ts)
-            tiles.Add(tile, 1, wx.RIGHT, 10 if name != 'S' else 0)
+            tiles.Add(tile, 1, wx.RIGHT, 10 if name != 'beta' else 0)
         s.Add(tiles, 0, wx.EXPAND | wx.BOTTOM, 18)
         bottom = wx.BoxSizer(wx.HORIZONTAL)
         dt = Card(p)
@@ -444,11 +501,6 @@ class EstimatorFrame(wx.Frame):
         except Exception as exc:
             self.error(exc)
 
-    def change_correction(self, event=None):
-        self.session.correction = self.correction.GetValue()
-        self.session.refit()
-        self.refresh()
-
     def clear_prediction(self, event=None):
         self.prediction.SetLabel('— tonne')
         self.prediction_detail.SetLabel('입력 제원으로 경하중량 추정 버튼을 누르세요.')
@@ -480,9 +532,9 @@ class EstimatorFrame(wx.Frame):
             self.result_table.show_frame(pd.DataFrame())
             self.prediction_detail.SetLabel(self.session.issue)
         else:
-            for name, value in zip(['K', 'alpha', 'beta', 'S'], [fitted.k, fitted.alpha, fitted.beta, fitted.smearing]):
+            for name, value in zip(['K', 'alpha', 'beta'], [fitted.k, fitted.alpha, fitted.beta]):
                 self.coefficient_values[name].SetLabel(f'{value:.6g}')
-            self.coefficients.SetLabel(f'K = {fitted.k:.8g}     alpha = {fitted.alpha:.7g}     beta = {fitted.beta:.7g}     S = {fitted.smearing:.7g}')
+            self.coefficients.SetLabel(f'K = {fitted.k:.8g}     alpha = {fitted.alpha:.7g}     beta = {fitted.beta:.7g}')
             self.dt_table.show_frame(fitted.coefficients)
             comparison = ['함명', '함종', '경하중량', '예측중량', '오차', '오차율(%)']
             self.result_table.show_frame(fitted.results[comparison])
@@ -564,7 +616,7 @@ class EstimatorFrame(wx.Frame):
             factor = fitted.coefficients.set_index('함종').loc[typ, 'D_T']
             with np.errstate(over='raise', invalid='raise'):
                 try:
-                    logz = np.log(fitted.k * factor * fitted.smearing) + fitted.alpha * np.log(x) + fitted.beta * np.log(y)
+                    logz = np.log(fitted.k * factor) + fitted.alpha * np.log(x) + fitted.beta * np.log(y)
                     z = np.exp(logz)
                 except FloatingPointError:
                     ax.text2D(.2, .5, '곡면의 수치 범위를 초과했습니다.', transform=ax.transAxes)
@@ -615,8 +667,16 @@ def smoke_test(frame, output):
     assert frame.template_button.GetLabel() == 'Download Input File Template'
     assert frame.upload_button.GetLabel() == 'Input File Upload'
     assert not hasattr(frame, 'append_excel')
+    assert not hasattr(frame, 'correction')
+    assert not hasattr(frame.session, 'correction')
+    assert set(frame.coefficient_values) == {'K', 'alpha', 'beta'}
+    assert frame.session.fitted.smearing == 1.0
+    assert frame.copyright.GetLabel() == 'Copyright by Naval Ship Design Technology Division'
+    assert all(nav.GetFont().GetWeight() == wx.FONTWEIGHT_BOLD for nav in frame.navigation)
+    assert frame.equation_bitmap.GetBitmap().IsOk() and frame.header_illustration.GetBitmap().IsOk()
+    assert isinstance(frame.upload_button, ElevatedButton)
     assert frame.prediction.GetLabel() == '— tonne'
-    checks.append('Report export, replacement upload, renamed controls and stale result clearing: PASS')
+    checks.append('Report export, replacement upload, bold navigation, copyright, equation/ship images, raised buttons and uncorrected model: PASS')
     Path(output).write_text('\n'.join(checks), encoding='utf-8')
 
 

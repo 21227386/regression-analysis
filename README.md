@@ -17,9 +17,9 @@ Windows 데스크톱 GUI에서 실적함 엑셀로 회귀계수를 산출하고,
 
 ## 추정 방식과 한계
 
-`W = S × K × (L×B×H)^α × Vc^β × D_T`
+`W = K × (L×B×H)^α × Vc^β × D_T`
 
-호위함의 D_T=1로 고정하고 호위함 자료만으로 로그 최소제곱 회귀계수 K, α, β를 추정합니다. 이 계수를 고정한 뒤 다른 함종의 D_T는 `실적중량 / [S×K×(LBH)^α×Vc^β]`의 기하평균으로 구합니다. 보정을 선택하지 않으면 S=1입니다.
+호위함의 D_T=1로 고정하고 호위함 자료만으로 로그 최소제곱 회귀계수 K, α, β를 추정합니다. 이 계수를 고정한 뒤 다른 함종의 D_T는 `실적중량 / [K×(LBH)^α×Vc^β]`의 기하평균으로 구합니다. 로그 역변환 편향 보정은 적용하지 않습니다.
 
 호위함 자료는 최소 4척이 필요하며 크기·속력에 독립적인 변화가 있어야 합니다. 자료가 없는 함종의 계수는 추정하지 않습니다. 과거 모형은 새 자료로 적합할 수 없을 때 재사용하지 않습니다. 자료 수 증가만으로 예측 정확도 향상이 보장되지는 않습니다. 표시되는 MAE·RMSE·MAPE·R²는 학습 자료의 적합 지표이며 독립 검증 성능이나 예측구간은 아닙니다.
 
@@ -35,7 +35,7 @@ Windows 데스크톱 GUI에서 실적함 엑셀로 회귀계수를 산출하고,
 
 Windows 10/11 64비트용입니다. 첫 실행에서 필요한 파일을 사용자 LocalAppData에 자동 준비하고, 다음 실행부터 재사용합니다. PowerShell이나 Python 설치, 인터넷 연결, 웹서버가 필요하지 않습니다. 약 512MB 이상의 디스크 여유 공간을 확보하세요.
 
-새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v4`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
+새 버전의 캐시는 `%LOCALAPPDATA%/NavalShipWeightEstimator/Desktop_v5`입니다. 실행 오류 시 이 폴더의 `startup.log`, `runtime.log`를 확인하세요. 이전 버전 캐시를 직접 지울 필요는 없습니다.
 
 ## 소스로 실행
 
@@ -49,10 +49,14 @@ python -m venv .venv
 
 `workflow.py`는 자료 불러오기·재학습·예측·결과 저장을 담당하고, `desktop_app.py`는 Windows 네이티브 GUI입니다. `packaging/desktop_launcher.c`는 단일 EXE에서 내장 ZIP을 준비하고 GUI를 실행합니다. 라이선스는 각 런타임/라이브러리와 `packaging/vendor/miniz/LICENSE`, `assets/fonts/OFL.txt`를 참고하세요.
 
-회귀·엑셀·워크플로 테스트 17개가 통과했습니다. Wine 10.0에서 실제 Windows용 GUI의 엑셀 읽기·자동 학습·예측·입력 파일 교체·결과 저장·3D/로그 그래프 동작을 확인했고, 단일 EXE의 첫 파일 준비와 창 열림도 확인했습니다. Windows 호환 환경(Wine)의 검증은 실제 Windows PC 검증과 구분합니다. 이전 브라우저 버전의 설명은 [docs/LEGACY_WEB.md](docs/LEGACY_WEB.md)에 있습니다.
+회귀·엑셀·워크플로 테스트 18개가 통과했습니다. Wine 10.0에서 실제 Windows용 GUI의 엑셀 읽기·자동 학습·예측·입력 파일 교체·결과 저장·3D/로그 그래프 동작을 확인했고, 단일 EXE의 첫 파일 준비와 창 열림도 확인했습니다. Windows 호환 환경(Wine)의 검증은 실제 Windows PC 검증과 구분합니다. 이전 브라우저 버전의 설명은 [docs/LEGACY_WEB.md](docs/LEGACY_WEB.md)에 있습니다.
 
 ## 화면 예시
 
 아래 화면은 가상 예제 자료로 확인한 GUI입니다. 표시된 중량은 실제 설계값이 아닙니다.
 
 ![데스크톱 GUI 예시](docs/desktop-preview.png)
+
+## GUI 표시
+
+좌측 메뉴는 굵은 글씨로 표시하며 버튼은 그라데이션·그림자·눌림 효과를 제공합니다. 상단의 함정·중량 계측 일러스트와 Regression Model의 수식 이미지는 프로그램에 포함되어 오프라인으로 표시됩니다. 오른쪽 아래에는 `Copyright by Naval Ship Design Technology Division`을 표시합니다. 로그 역변환 편향 보정 선택 및 S 표시는 제공하지 않으며 결과 Excel에도 S를 내보내지 않습니다.

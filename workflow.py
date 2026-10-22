@@ -9,7 +9,6 @@ class EstimatorSession:
     def __init__(self):
         self.data = None
         self.fitted = None
-        self.correction = False
         self.issue = ''
 
     def load(self, frame, append=False):
@@ -26,7 +25,7 @@ class EstimatorSession:
             self.issue = '실적함 엑셀을 불러오세요.'
             return
         try:
-            self.fitted = fit(self.data, correction=self.correction)
+            self.fitted = fit(self.data, correction=False)
         except ValueError as exc:
             self.issue = str(exc)
 
@@ -53,7 +52,7 @@ class EstimatorSession:
         with pd.ExcelWriter(out, engine='openpyxl') as writer:
             self.data.rename(columns={'순항속력': '순항속력 (not)'}).to_excel(writer, sheet_name='입력자료', index=False)
             pd.DataFrame([{'K': fit_result.k, 'alpha': fit_result.alpha, 'beta': fit_result.beta,
-                           'S': fit_result.smearing, '기준함종': '호위함', '속력기준': '순항속력 (not)',
+                           '기준함종': '호위함', '속력기준': '순항속력 (not)',
                            '추정방식': '호위함 회귀 후 타 함종 DT 산출'}]).to_excel(writer, sheet_name='회귀계수', index=False)
             fit_result.coefficients.to_excel(writer, sheet_name='함종별_DT', index=False)
             fit_result.results.to_excel(writer, sheet_name='실적함_비교', index=False)
