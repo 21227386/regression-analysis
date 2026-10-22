@@ -11,7 +11,7 @@ class ExcelTests(unittest.TestCase):
         loaded = read_excel(BytesIO(workbook_bytes(df)))
         result = fit(loaded)
         self.assertEqual(result.reference, '지원함')
-        self.assertEqual(len(result.results), 60)
+        self.assertEqual(len(result.results), len(example()))
         self.assertEqual(result.coefficients.set_index('함종').loc['지원함', 'D_T'], 1)
         np.testing.assert_allclose(result.results['예측중량'], fit(example()).results['예측중량'])
 
@@ -53,3 +53,4 @@ class SpeedLabelTests(unittest.TestCase):
             np.testing.assert_allclose(loaded['순항속력'], frame['순항속력'])
         book = load_workbook(BytesIO(workbook_bytes(frame)))
         self.assertIn('상륙함', book.active.data_validations.dataValidation[0].formula1)
+        self.assertIn('기뢰전함', book.active.data_validations.dataValidation[0].formula1)

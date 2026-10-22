@@ -5,7 +5,7 @@ import pandas as pd
 
 COLUMNS = ['함명', '함종', '경하중량', '길이', '폭', '깊이', '순항속력']
 NUMERIC = COLUMNS[2:]
-SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함', '상륙함']
+SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함', '상륙함', '기뢰전함']
 REFERENCE = '지원함'
 
 @dataclass
@@ -131,9 +131,9 @@ def example():
     """Synthetic demonstration only; not real ship data."""
     rng = np.random.default_rng(42)
     rows = []
-    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('지원함', 1.1), ('상륙함', 1.15)]:
+    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('지원함', 1.1), ('상륙함', 1.15), ('기뢰전함', .9)]:
         for i in range(12):
-            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '지원함': (12,15), '상륙함': (12,18)}[typ])
+            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '지원함': (12,15), '상륙함': (12,18), '기뢰전함': (10,16)}[typ])
             w = .035 * (l*b*h)**1.05 * v**.25 * factor * np.exp(rng.normal(0, .045))
             rows.append([f'{typ}-{i+1}', typ, w, l, b, h, v])
     return pd.DataFrame(rows, columns=COLUMNS)

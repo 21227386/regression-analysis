@@ -589,7 +589,7 @@ class EstimatorFrame(wx.Frame):
         s.Add(row, 0, wx.EXPAND | wx.BOTTOM, 18)
         reference = Card(p)
         ref = wx.BoxSizer(wx.VERTICAL)
-        ref.Add(label(reference, '순항속력 참고 범위  /  kn = knot(노트) · 상륙함은 실제 자료 입력', 10, True), 0, wx.ALL, 18)
+        ref.Add(label(reference, '순항속력 참고 범위  /  kn = knot(노트) · 상륙함·기뢰전함은 실제 자료 입력', 10, True), 0, wx.ALL, 18)
         ref.Add(label(reference, '구축함 17–20   ·   호위함 15–18   ·   고속함 15–20   ·   지원함 12–15', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         reference.SetSizer(ref)
         s.Add(reference, 0, wx.EXPAND)
@@ -933,7 +933,7 @@ def smoke_test(frame, output):
     frame.session.load(data)
     frame.refresh()
     checks.append('Support 12 / destroyer 4 / frigate 3 joint fit, prediction and invalid replacement clearing: PASS')
-    for present in [['구축함', '호위함'], ['상륙함'], ['지원함', '구축함']]:
+    for present in [['구축함', '호위함'], ['상륙함'], ['기뢰전함'], ['지원함', '기뢰전함'], ['지원함', '구축함']]:
         subset = data[data['함종'].isin(present)]
         frame.session.load(subset)
         frame.refresh()

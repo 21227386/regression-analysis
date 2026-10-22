@@ -6,11 +6,11 @@ from model import example, fit, predict
 class RegressionTests(unittest.TestCase):
     def test_recovers_known_equation_and_reference(self):
         df = example()
-        factors = df['함종'].map({'호위함': 1., '구축함': 1.25, '고속함': .85, '지원함': 1.1, '상륙함': 1.15})
+        factors = df['함종'].map({'호위함': 1., '구축함': 1.25, '고속함': .85, '지원함': 1.1, '상륙함': 1.15, '기뢰전함': .9})
         df['경하중량'] = .035*(df['길이']*df['폭']*df['깊이'])**1.05*df['순항속력']**.25*factors
         result = fit(df, '호위함')
         np.testing.assert_allclose([result.k, result.alpha, result.beta], [.035, 1.05, .25], rtol=1e-9)
-        np.testing.assert_allclose(result.coefficients['D_T'], [1, .85, 1.25, 1.15, 1.1], rtol=1e-9)
+        np.testing.assert_allclose(result.coefficients['D_T'], [1, .85, 1.25, .9, 1.15, 1.1], rtol=1e-9)
         self.assertLess(result.metrics['MAPE (%)'], 1e-9)
         row = df.iloc[0]
         self.assertAlmostEqual(predict(result, row['함종'], *row[['길이','폭','깊이','순항속력']]), row['경하중량'])
@@ -79,10 +79,10 @@ class JointTests(unittest.TestCase):
     def test_rank_checks_account_for_type_effects_and_residual_degrees(self):
         df = example()
         # Speed varies overall, but only between types: beta is confounded with D_T.
-        df['순항속력'] = df['함종'].map({'지원함': 12, '호위함': 16, '구축함': 18, '고속함': 20, '상륙함': 14})
+        df['순항속력'] = df['함종'].map({'지원함': 12, '호위함': 16, '구축함': 18, '고속함': 20, '상륙함': 14, '기뢰전함': 13})
         with self.assertRaisesRegex(ValueError, '함종 효과'): fit(df)
         df = example().groupby('함종', group_keys=False).head(1)
-        with self.assertRaisesRegex(ValueError, '최소 8척'): fit(df)
+        with self.assertRaisesRegex(ValueError, '최소 9척'): fit(df)
 
 class CruiseSpeedTests(unittest.TestCase):
     def test_maximum_speed_is_never_silently_relabelled(self):

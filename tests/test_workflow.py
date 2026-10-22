@@ -2,7 +2,7 @@ from io import BytesIO
 import unittest
 import pandas as pd
 import numpy as np
-from model import example
+from model import SHIP_TYPES, example
 from excel_io import read_excel
 from workflow import EstimatorSession
 
@@ -16,13 +16,13 @@ class WorkflowTests(unittest.TestCase):
         addition = example().query("함종 == '구축함'").iloc[:2].copy()
         addition['경하중량'] *= 2
         session.load(addition, append=True)
-        self.assertEqual(len(session.data), 62)
+        self.assertEqual(len(session.data), len(example()) + 2)
         self.assertNotAlmostEqual(session.fitted.k, first_k)
         loaded = read_excel(BytesIO(session.input_bytes()))
-        self.assertEqual(len(loaded), 62)
+        self.assertEqual(len(loaded), len(example()) + 2)
         book = pd.ExcelFile(BytesIO(session.report_bytes()))
         self.assertEqual(len(book.sheet_names), 5)
-        self.assertEqual(len(pd.read_excel(book, sheet_name='실적함_비교')), 62)
+        self.assertEqual(len(pd.read_excel(book, sheet_name='실적함_비교')), len(example()) + 2)
 
     def test_insufficient_replacement_clears_previous_model(self):
         session = EstimatorSession()
@@ -40,7 +40,7 @@ class WorkflowTests(unittest.TestCase):
         invalid.loc[0, '순항속력'] = 0
         with self.assertRaises(ValueError): session.load(invalid)
         self.assertIs(session.fitted, previous)
-        self.assertEqual(len(session.data), 60)
+        self.assertEqual(len(session.data), len(example()))
 
 class UncorrectedWorkflowTests(unittest.TestCase):
     def test_no_bias_option_or_exported_s_and_base_equation(self):
@@ -62,9 +62,9 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         session.load(example())
         fitted = session.fitted
         all_rows, metrics = session.comparison()
-        self.assertEqual(len(all_rows), 60)
+        self.assertEqual(len(all_rows), len(example()))
         self.assertAlmostEqual(metrics['MAE'], fitted.metrics['MAE (tonne)'])
-        for kind in ['구축함', '호위함', '고속함', '지원함', '상륙함']:
+        for kind in SHIP_TYPES:
             rows, values = session.comparison(kind)
             self.assertEqual(len(rows), 12)
             self.assertEqual(set(rows['함종']), {kind})
@@ -100,3 +100,13 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         self.assertEqual(pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist(), ['상륙함'])
         self.assertEqual(pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist(), ['전체 함종', '상륙함'])
         self.assertEqual(pd.read_excel(book, sheet_name='회귀계수').loc[0, '기준함종'], '상륙함')
+
+    def test_mine_warfare_ship_prediction_and_report(self):
+        session = EstimatorSession()
+        session.load(example().query("함종 == '기뢰전함'"))
+        self.assertEqual(session.fitted.reference, '기뢰전함')
+        self.assertGreater(session.estimate('기뢰전함', 100, 15, 8, 16)[0], 0)
+        self.assertEqual(len(session.comparison('기뢰전함')[0]), 12)
+        book = pd.ExcelFile(BytesIO(session.report_bytes()))
+        self.assertEqual(pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist(), ['기뢰전함'])
+        self.assertEqual(pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist(), ['전체 함종', '기뢰전함'])
