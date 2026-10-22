@@ -43,7 +43,7 @@ def mass_surface(fitted, ship_type, logarithmic=False):
         lx.extend([a, a, None]); ly.extend([b, b, None]); lz.extend([c, d, None])
     fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', name='실적−예측 차이',
                                line={'color': '#ef553b', 'width': 3}, hoverinfo='skip'))
-    titles = ['ln(LBH / m³)', 'ln(V / not)', 'ln(W / tonne)'] if logarithmic else ['LBH (m³)', '순항속력 V (not)', '경하중량 W (tonne)']
+    titles = ['ln(LBH / m³)', 'ln(V / kn)', 'ln(W / tonne)'] if logarithmic else ['LBH (m³)', '순항속력 V (kn)', '경하중량 W (tonne)']
     fig.update_layout(title=f'{ship_type} · D_T = {factor:.6g}' + (' · 로그 공간 평면' if logarithmic else ''),
                       scene={'xaxis_title': titles[0], 'yaxis_title': titles[1], 'zaxis_title': titles[2]},
                       height=680, margin={'l': 0, 'r': 0, 'b': 0, 't': 55}, legend={'orientation': 'h'})

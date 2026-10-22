@@ -1,11 +1,11 @@
-"""Lightship mass regression. Units: tonne, metre, not."""
+"""Lightship mass regression. Units: tonne, metre, kn."""
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
 COLUMNS = ['함명', '함종', '경하중량', '길이', '폭', '깊이', '순항속력']
 NUMERIC = COLUMNS[2:]
-SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함']
+SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함', '상륙함']
 REFERENCE = '지원함'
 
 @dataclass
@@ -31,7 +31,7 @@ def validate(data):
         blank = data['함명'].isna() | data['함명'].astype(str).str.strip().eq('')
         data.loc[blank, '함명'] = [f'실적선 {i+1}' for i in np.flatnonzero(blank)]
     if '순항속력' not in data.columns and any(col in data.columns for col in ['최대속력', '최고속력']):
-        raise ValueError('기존 최대/최고속력 자료는 자동 환산하지 않습니다. 순항속력(not)을 확인하여 순항속력 열에 입력하세요.')
+        raise ValueError('기존 최대/최고속력 자료는 자동 환산하지 않습니다. 순항속력(kn)을 확인하여 순항속력 열에 입력하세요.')
     missing = set(COLUMNS) - set(data.columns)
     if missing:
         raise ValueError('필수 열 누락: ' + ', '.join(sorted(missing)))
@@ -44,7 +44,7 @@ def validate(data):
         df[col] = df[col].astype(str).str.strip()
     invalid = sorted(set(df['함종']) - set(SHIP_TYPES))
     if invalid:
-        raise ValueError('허용되지 않은 함종: ' + ', '.join(invalid) + '. 구축함, 호위함, 고속함, 지원함 중 하나를 입력하세요.')
+        raise ValueError('허용되지 않은 함종: ' + ', '.join(invalid) + '. ' + ', '.join(SHIP_TYPES) + ' 중 하나를 입력하세요.')
     for col in NUMERIC:
         df[col] = pd.to_numeric(df[col], errors='coerce')
         if not np.isfinite(df[col]).all() or (df[col] <= 0).any():
@@ -127,9 +127,9 @@ def example():
     """Synthetic demonstration only; not real ship data."""
     rng = np.random.default_rng(42)
     rows = []
-    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('지원함', 1.1)]:
+    for typ, factor in [('호위함', 1.0), ('구축함', 1.25), ('고속함', .85), ('지원함', 1.1), ('상륙함', 1.15)]:
         for i in range(12):
-            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '지원함': (12,15)}[typ])
+            l, b, h, v = rng.uniform(70, 150), rng.uniform(10, 20), rng.uniform(6, 12), rng.uniform(*{'구축함': (17,20), '호위함': (15,18), '고속함': (15,20), '지원함': (12,15), '상륙함': (12,18)}[typ])
             w = .035 * (l*b*h)**1.05 * v**.25 * factor * np.exp(rng.normal(0, .045))
             rows.append([f'{typ}-{i+1}', typ, w, l, b, h, v])
     return pd.DataFrame(rows, columns=COLUMNS)

@@ -284,7 +284,7 @@ class Table(dv.DataViewListCtrl):
             self.DeleteAllItems()
             self.ClearColumns()
             for name in frame.columns:
-                title = '순항속력 (not)' if name == '순항속력' else str(name)
+                title = '순항속력 (kn)' if name == '순항속력' else str(name)
                 width = {'함종': 72, 'D_T': 80, '실적선 수': 70}.get(str(name), 130)
                 column = dv.DataViewColumn('' if str(name) == 'D_T' else title,
                                            BilingualRenderer(self), self.GetColumnCount(), width=width)
@@ -383,7 +383,7 @@ class EstimatorFrame(wx.Frame):
                 event.Skip()
         status.Bind(wx.EVT_SIZE, position_copyright)
         wx.CallAfter(position_copyright)
-        self.SetStatusText('순항속력 not = knot(노트)  ·  중량 tonne  ·  치수 m')
+        self.SetStatusText('순항속력 kn = knot(노트)  ·  중량 tonne  ·  치수 m')
         self.select_page(0)
         self.Centre()
 
@@ -443,7 +443,7 @@ class EstimatorFrame(wx.Frame):
         self.input_table = Table(data_card)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
         ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
-        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 not   |   지원함 포함 · 전체 함종 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
+        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   지원함 포함 · 전체 함종 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
         data_card.SetSizer(ds)
         s.Add(data_card, 1, wx.EXPAND)
 
@@ -460,7 +460,7 @@ class EstimatorFrame(wx.Frame):
         equation = wx.Image(str(equation_path)).Scale(570, 83, wx.IMAGE_QUALITY_HIGH)
         self.equation_bitmap = wx.StaticBitmap(intro, bitmap=wx.Bitmap(equation))
         info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
-        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 지원함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        info.Add(label(intro, 'Vc: 순항속력(kn)    |    기준 함종: 지원함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
         info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         intro.SetSizer(info)
@@ -542,7 +542,7 @@ class EstimatorFrame(wx.Frame):
         fields.AddGrowableCol(0, 1)
         fields.AddGrowableCol(1, 1)
         self.inputs = []
-        for name, value in [('길이 L (m)', '100'), ('폭 B (m)', '15'), ('깊이 H (m)', '8'), ('순항속력 Vc (not)', '16')]:
+        for name, value in [('길이 L (m)', '100'), ('폭 B (m)', '15'), ('깊이 H (m)', '8'), ('순항속력 Vc (kn)', '16')]:
             part = wx.Panel(params)
             part.SetBackgroundColour('#FFFFFF')
             fs = wx.BoxSizer(wx.VERTICAL)
@@ -584,7 +584,7 @@ class EstimatorFrame(wx.Frame):
         s.Add(row, 0, wx.EXPAND | wx.BOTTOM, 18)
         reference = Card(p)
         ref = wx.BoxSizer(wx.VERTICAL)
-        ref.Add(label(reference, '순항속력 참고 범위  /  not = knot(노트)', 10, True), 0, wx.ALL, 18)
+        ref.Add(label(reference, '순항속력 참고 범위  /  kn = knot(노트) · 상륙함은 실제 자료 입력', 10, True), 0, wx.ALL, 18)
         ref.Add(label(reference, '구축함 17–20   ·   호위함 15–18   ·   고속함 15–20   ·   지원함 12–15', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         reference.SetSizer(ref)
         s.Add(reference, 0, wx.EXPAND)
@@ -603,7 +603,7 @@ class EstimatorFrame(wx.Frame):
             row.Add(control, 0, wx.RIGHT, 12)
             control.Bind(wx.EVT_CHOICE, self.draw_graph)
         s.Add(row, 0, wx.ALL, 16)
-        s.Add(label(p, '곡면: X=LBH(m³), Y=순항속력(not), Z=경하중량(tonne). 빨간 점=실적, 선=실적−예측 차이. 마우스로 회전할 수 있습니다.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        s.Add(label(p, '곡면: X=LBH(m³), Y=순항속력(kn), Z=경하중량(tonne). 빨간 점=실적, 선=실적−예측 차이. 마우스로 회전할 수 있습니다.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.figure = Figure(figsize=(9, 5), facecolor='white', constrained_layout=True)
         self.canvas = FigureCanvasWxAgg(p, wx.ID_ANY, self.figure)
         self.canvas.SetMinSize((200, 160))
@@ -826,7 +826,7 @@ class EstimatorFrame(wx.Frame):
             for a, b, c, d in zip(ox, oy, actual, pred):
                 ax.plot([a, a], [b, b], [c, d], color='#E7563F', alpha=.8)
             ax.set_xlabel('ln(LBH / m³)' if mode == 2 else 'LBH (m³)')
-            ax.set_ylabel('ln(Vc / not)' if mode == 2 else '순항속력 (not)')
+            ax.set_ylabel('ln(Vc / kn)' if mode == 2 else '순항속력 (kn)')
             ax.set_zlabel('ln(W / tonne)' if mode == 2 else '경하중량 (tonne)')
             ax.set_title(typ + rf' · $D_T={factor:.5g}$')
             ax.legend()
@@ -842,7 +842,7 @@ def smoke_test(frame, output):
     frame.source_text = '자동 검증용 가상 자료'
     frame.refresh()
     assert frame.session.fitted is not None
-    assert frame.input_table.GetItemCount() == 48
+    assert frame.input_table.GetItemCount() == len(data)
     assert frame.session.fitted.reference == '지원함'
     assert frame.session.fitted.coefficients.set_index('함종').loc['지원함', 'D_T'] == 1.0
     assert frame.estimate_button.IsEnabled()
@@ -853,7 +853,7 @@ def smoke_test(frame, output):
     for scope in ['전체 함종'] + SHIP_TYPES:
         frame.comparison_scope.SetStringSelection(scope)
         frame.refresh_comparison()
-        assert frame.result_table.GetItemCount() == (48 if scope == '전체 함종' else 12)
+        assert frame.result_table.GetItemCount() == (len(data) if scope == '전체 함종' else 12)
         assert scope in frame.metrics.GetLabel()
         assert frame.session.fitted is fitted_before
     frame.comparison_scope.SetSelection(0)
@@ -863,6 +863,14 @@ def smoke_test(frame, output):
     for mode in [0, 1, 2]:
         frame.graph_mode.SetSelection(mode)
         frame.draw_graph()
+    frame.ship_type.SetStringSelection('상륙함')
+    frame.estimate()
+    assert '—' not in frame.prediction.GetLabel()
+    frame.graph_type.SetStringSelection('상륙함')
+    frame.draw_graph()
+    frame.ship_type.SetStringSelection('호위함')
+    frame.graph_type.SetStringSelection('호위함')
+    checks.append('Landing ship prediction, type comparison and 3D graph: PASS')
     checks.append('Comparison chart, 3D surface and log plane: PASS')
     user_mix = pd.concat([data.query("함종 == '지원함'"),
                          data.query("함종 == '구축함'").head(4),

@@ -17,7 +17,7 @@ def main():
     report.write('Ship Regression validation\n')
     report.write(f'UTC: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n')
     report.write(f'Platform: {platform.platform()}\nPython: {sys.version}\n')
-    report.write('Speed input: cruise speed (not)\n')
+    report.write('Speed input: cruise speed (kn)\n')
     if sys.platform == 'win32':
         import ctypes
         try:

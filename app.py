@@ -8,11 +8,11 @@ from surface import mass_surface
 st.set_page_config(page_title='함정 경하중량 회귀분석', layout='wide')
 st.title('함정 경하중량 회귀분석')
 st.latex(r'W_{LS}=K(LBH)^{\alpha}V_c^{\beta}D_T')
-st.caption('표기 not는 knot(노트)와 같은 의미로 사용하며 수치 환산은 하지 않습니다. V_c는 순항속력(not)입니다. 최대속력으로 추정했던 계수는 그대로 재사용하지 않고 순항속력 자료로 다시 학습해야 합니다.')
-st.write('단위: 경하중량 tonne · 길이/폭/깊이 m · 순항속력 not. 깊이는 흘수와 구분하여 입력하세요.')
+st.caption('표기 kn은 knot(노트)와 같은 의미로 사용하며 수치 환산은 하지 않습니다. V_c는 순항속력(kn)입니다. 최대속력으로 추정했던 계수는 그대로 재사용하지 않고 순항속력 자료로 다시 학습해야 합니다.')
+st.write('단위: 경하중량 tonne · 길이/폭/깊이 m · 순항속력 kn. 깊이는 흘수와 구분하여 입력하세요.')
 st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 지원함 D_T=1입니다.')
 with st.expander('순항속력 참고 범위 (사용자 제공 대략값)'):
-    st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함', '지원함'], '순항속력 (not)': ['17–20', '15–18', '15–20', '12–15']}))
+    st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함', '지원함'], '순항속력 (kn)': ['17–20', '15–18', '15–20', '12–15']}))
     st.caption('참고 범위이며 자동 환산이나 입력 제한에 사용하지 않습니다. 실적선별 실제 순항속력을 입력하세요.')
 file = st.file_uploader('실적선 엑셀 업로드 (.xlsx)', type=['xlsx'])
 st.download_button('빈 엑셀 입력 양식 다운로드', workbook_bytes(pd.DataFrame(columns=COLUMNS)),
@@ -30,12 +30,12 @@ if file:
 else:
     st.warning('현재 표시된 자료는 기능 확인용 가상 자료입니다. 실제 함정의 계수나 성능을 나타내지 않습니다.')
     source = example()
-st.caption('첫 행은 열 이름이어야 합니다. 필수 열: ' + ', '.join(COLUMNS[1:]) + '. 함명은 선택 항목입니다. 함종: 구축함/호위함/고속함/지원함.')
-st.caption('단위: 경하중량 tonne, 길이·폭·깊이 m, 순항속력 not. 빈 행은 제외합니다.')
+st.caption('첫 행은 열 이름이어야 합니다. 필수 열: ' + ', '.join(COLUMNS[1:]) + '. 함명은 선택 항목입니다. 함종: 구축함/호위함/고속함/지원함/상륙함.')
+st.caption('단위: 경하중량 tonne, 길이·폭·깊이 m, 순항속력 kn. 빈 행은 제외합니다.')
 st.caption('자료가 늘어나면 기존 실적선과 새 실적선을 합친 엑셀을 업로드하거나 아래 표에 행을 추가하세요. 매번 전체 입력 자료로 다시 학습합니다. 중복 행은 의도치 않은 가중치가 되므로 제거하세요.')
 edited = st.data_editor(source, num_rows='dynamic', width='stretch',
                         column_config={'함종': st.column_config.SelectboxColumn(options=SHIP_TYPES, required=True),
-                                       '순항속력': st.column_config.NumberColumn('순항속력 (not)', min_value=0.01, required=True)})
+                                       '순항속력': st.column_config.NumberColumn('순항속력 (kn)', min_value=0.01, required=True)})
 try:
     data = validate(edited)
     st.download_button('현재 학습자료 엑셀 저장', workbook_bytes(data), 'training_data.xlsx',
@@ -70,7 +70,7 @@ st.dataframe(fitted.results, hide_index=True, width='stretch')
 st.scatter_chart(fitted.results, x='경하중량', y='예측중량', color='함종')
 st.caption('가로축: 실적 경하중량, 세로축: 예측 경하중량 (tonne). 두 값이 같을수록 잘 맞습니다.')
 st.download_button('실적선 비교 CSV', fitted.results.to_csv(index=False).encode('utf-8-sig'), 'fit_results.csv', 'text/csv')
-export = fitted.coefficients.assign(K=fitted.k, alpha=fitted.alpha, beta=fitted.beta, S=fitted.smearing, 기준함종=reference, 속력기준='순항속력(not)')
+export = fitted.coefficients.assign(K=fitted.k, alpha=fitted.alpha, beta=fitted.beta, S=fitted.smearing, 기준함종=reference, 속력기준='순항속력(kn)')
 st.download_button('계수 CSV', export.to_csv(index=False).encode('utf-8-sig'), 'coefficients.csv', 'text/csv')
 st.subheader('함종별 3차원 경하중량 곡면')
 st.caption('함종의 D_T를 고정하고 LBH와 순항속력에 따른 예측 중량을 표시합니다. 마우스로 회전·확대할 수 있습니다.')
@@ -89,7 +89,7 @@ with st.form('prediction'):
     typ = st.selectbox('함종', fitted.coefficients['함종'])
     fields = st.columns(4)
     vals = [col.number_input(label, min_value=0.01, value=float(data[key].median()))
-            for col, label, key in zip(fields, ['길이 (m)', '폭 (m)', '깊이 (m)', '순항속력 (not)'], ['길이', '폭', '깊이', '순항속력'])]
+            for col, label, key in zip(fields, ['길이 (m)', '폭 (m)', '깊이 (m)', '순항속력 (kn)'], ['길이', '폭', '깊이', '순항속력'])]
     submitted = st.form_submit_button('추정')
 if submitted:
     try:

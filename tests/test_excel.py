@@ -11,7 +11,7 @@ class ExcelTests(unittest.TestCase):
         loaded = read_excel(BytesIO(workbook_bytes(df)))
         result = fit(loaded)
         self.assertEqual(result.reference, '지원함')
-        self.assertEqual(len(result.results), 48)
+        self.assertEqual(len(result.results), 60)
         self.assertEqual(result.coefficients.set_index('함종').loc['지원함', 'D_T'], 1)
         np.testing.assert_allclose(result.results['예측중량'], fit(example()).results['예측중량'])
 
@@ -35,7 +35,18 @@ class SpeedLabelTests(unittest.TestCase):
         from openpyxl import load_workbook
         content = workbook_bytes(example())
         book = load_workbook(BytesIO(content), read_only=True)
-        self.assertIn('순항속력 (not)', next(book.active.values))
+        self.assertIn('순항속력 (kn)', next(book.active.values))
         loaded = read_excel(BytesIO(content))
         self.assertIn('순항속력', loaded.columns)
         np.testing.assert_allclose(loaded['순항속력'], example()['순항속력'])
+
+    def test_old_speed_headers_and_landing_ship_dropdown(self):
+        from openpyxl import load_workbook
+        frame = example()
+        for header in ['순항속력', '순항속력 (kn)', '순항속력(kn)', '순항속력 (not)', '순항속력(knot)']:
+            buffer = BytesIO()
+            frame.rename(columns={'순항속력': header}).to_excel(buffer, index=False)
+            loaded = read_excel(BytesIO(buffer.getvalue()))
+            np.testing.assert_allclose(loaded['순항속력'], frame['순항속력'])
+        book = load_workbook(BytesIO(workbook_bytes(frame)))
+        self.assertIn('상륙함', book.active.data_validations.dataValidation[0].formula1)

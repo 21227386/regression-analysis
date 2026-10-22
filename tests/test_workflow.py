@@ -16,13 +16,13 @@ class WorkflowTests(unittest.TestCase):
         addition = example().query("함종 == '구축함'").iloc[:2].copy()
         addition['경하중량'] *= 2
         session.load(addition, append=True)
-        self.assertEqual(len(session.data), 50)
+        self.assertEqual(len(session.data), 62)
         self.assertNotAlmostEqual(session.fitted.k, first_k)
         loaded = read_excel(BytesIO(session.input_bytes()))
-        self.assertEqual(len(loaded), 50)
+        self.assertEqual(len(loaded), 62)
         book = pd.ExcelFile(BytesIO(session.report_bytes()))
         self.assertEqual(len(book.sheet_names), 5)
-        self.assertEqual(len(pd.read_excel(book, sheet_name='실적함_비교')), 50)
+        self.assertEqual(len(pd.read_excel(book, sheet_name='실적함_비교')), 62)
 
     def test_insufficient_replacement_clears_previous_model(self):
         session = EstimatorSession()
@@ -40,7 +40,7 @@ class WorkflowTests(unittest.TestCase):
         invalid.loc[0, '순항속력'] = 0
         with self.assertRaises(ValueError): session.load(invalid)
         self.assertIs(session.fitted, previous)
-        self.assertEqual(len(session.data), 48)
+        self.assertEqual(len(session.data), 60)
 
 class UncorrectedWorkflowTests(unittest.TestCase):
     def test_no_bias_option_or_exported_s_and_base_equation(self):
@@ -62,9 +62,9 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         session.load(example())
         fitted = session.fitted
         all_rows, metrics = session.comparison()
-        self.assertEqual(len(all_rows), 48)
+        self.assertEqual(len(all_rows), 60)
         self.assertAlmostEqual(metrics['MAE'], fitted.metrics['MAE (tonne)'])
-        for kind in ['구축함', '호위함', '고속함', '지원함']:
+        for kind in ['구축함', '호위함', '고속함', '지원함', '상륙함']:
             rows, values = session.comparison(kind)
             self.assertEqual(len(rows), 12)
             self.assertEqual(set(rows['함종']), {kind})
@@ -74,3 +74,17 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         self.assertEqual(session.comparison('호위함')[1], {})
         session.fitted.results = session.fitted.results.iloc[:1]
         self.assertTrue(np.isnan(session.comparison()[1]['R²']))
+
+    def test_landing_ship_prediction_and_exported_units(self):
+        session = EstimatorSession()
+        session.load(example())
+        prediction, _ = session.estimate('상륙함', 100, 15, 8, 16)
+        self.assertGreater(prediction, 0)
+        rows, metrics = session.comparison('상륙함')
+        self.assertEqual(len(rows), 12)
+        self.assertTrue(np.isfinite(metrics['MAE']))
+        book = pd.ExcelFile(BytesIO(session.report_bytes()))
+        self.assertIn('순항속력 (kn)', pd.read_excel(book, sheet_name='입력자료').columns)
+        self.assertIn('상륙함', pd.read_excel(book, sheet_name='함종별_DT')['함종'].tolist())
+        self.assertIn('상륙함', pd.read_excel(book, sheet_name='학습자료_적합지표')['조회 범위'].tolist())
+        self.assertEqual(pd.read_excel(book, sheet_name='회귀계수').loc[0, '속력기준'], '순항속력 (kn)')
