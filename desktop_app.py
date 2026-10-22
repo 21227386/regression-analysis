@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import wx
 import wx.dataview as dv
+import wx.lib.buttons as buttons
 import wx.lib.scrolledpanel as scrolled
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg, NavigationToolbar2WxAgg
@@ -42,11 +43,60 @@ def label(parent, text, size=10, bold=False, color=INK):
     return item
 
 
-def button(parent, text, callback):
-    item = wx.Button(parent, label=text)
-    item.SetMinSize((-1, 36))
+def button(parent, text, callback, kind='secondary'):
+    item = buttons.GenButton(parent, label=text, style=wx.BORDER_NONE)
+    item.SetBezelWidth(0)
+    font = item.GetFont()
+    font.SetPointSize(10)
+    font.SetWeight(wx.FONTWEIGHT_BOLD)
+    item.SetFont(font)
+    base, hover, fg = ('#087F8C', '#066C78', '#FFFFFF') if kind == 'primary' else ('#EAF0F6', '#DCE7F0', '#284660')
+    item.SetBackgroundColour(base)
+    item.SetForegroundColour(fg)
+    width = item.GetTextExtent(text).width + 34
+    item.SetMinSize((width, 42))
     item.Bind(wx.EVT_BUTTON, callback)
+    def enter(event):
+        if item.IsEnabled():
+            item.SetBackgroundColour(hover)
+            item.Refresh()
+        event.Skip()
+    def leave(event):
+        item.SetBackgroundColour(base)
+        item.Refresh()
+        event.Skip()
+    item.Bind(wx.EVT_ENTER_WINDOW, enter)
+    item.Bind(wx.EVT_LEAVE_WINDOW, leave)
     return item
+
+
+class Card(wx.Panel):
+    def __init__(self, parent, color='#FFFFFF'):
+        super().__init__(parent)
+        self.color = color
+        self.SetBackgroundColour(color)
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.Bind(wx.EVT_PAINT, self.paint)
+
+    def paint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+        dc.SetPen(wx.Pen('#DEE6EF' if self.color == '#FFFFFF' else self.color))
+        dc.SetBrush(wx.Brush(self.color))
+        w, h = self.GetClientSize()
+        dc.DrawRoundedRectangle(0, 0, max(w-1, 0), max(h-1, 0), 12)
+
+
+class Workspace(wx.Simplebook):
+    def __init__(self, parent, changed):
+        super().__init__(parent)
+        self.changed = changed
+
+    def SetSelection(self, index):
+        result = super().SetSelection(index)
+        self.changed(index)
+        return result
 
 
 class Table(dv.DataViewListCtrl):
@@ -60,7 +110,8 @@ class Table(dv.DataViewListCtrl):
             self.ClearColumns()
             for name in frame.columns:
                 title = '순항속력 (not)' if name == '순항속력' else str(name)
-                self.AppendTextColumn(title, width=130)
+                width = {'함종': 72, 'D_T': 80, '실적선 수': 70}.get(str(name), 130)
+                self.AppendTextColumn(title, width=width)
             for row in frame.itertuples(index=False, name=None):
                 self.AppendItem([f'{v:,.5g}' if isinstance(v, (float, np.floating)) else str(v) for v in row])
         finally:
@@ -77,109 +128,233 @@ class EstimatorFrame(wx.Frame):
         self.source_text = '실적함 엑셀 파일을 불러오세요.'
         self.figure = None
         self.canvas = None
+        area = wx.GetClientDisplayRect()
+        self.SetSize((min(1360, area.width-36), min(900, area.height-48)))
         panel = wx.Panel(self)
         panel.SetBackgroundColour(BG)
-        layout = wx.BoxSizer(wx.VERTICAL)
-        header = wx.Panel(panel)
-        header.SetBackgroundColour(NAVY)
-        hs = wx.BoxSizer(wx.VERTICAL)
-        hs.Add(label(header, 'Naval Ship Weight Estimator', 23, True, '#FFFFFF'), 0, wx.ALL, 16)
-        hs.Add(label(header, '실적함 기반 회귀분석 · 함종별 설계계수 · 설계 함정 중량 추정', 11, False, '#D5E8F6'), 0, wx.LEFT | wx.BOTTOM, 18)
-        header.SetSizer(hs)
-        layout.Add(header, 0, wx.EXPAND)
-        layout.Add(label(panel, '  01  엑셀 자료 입력     →     02  회귀계수 자동 산출     →     03  설계 함정 중량 추정', 11, True), 0, wx.ALL, 16)
-        self.notice = label(panel, self.source_text, 10)
-        layout.Add(self.notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
-        self.tabs = wx.Notebook(panel)
+        layout = wx.BoxSizer(wx.HORIZONTAL)
+        sidebar = wx.Panel(panel)
+        sidebar.SetBackgroundColour(NAVY)
+        sidebar.SetMinSize((210, -1))
+        side = wx.BoxSizer(wx.VERTICAL)
+        side.Add(label(sidebar, 'N / W', 25, True, '#6FE0D4'), 0, wx.ALL, 24)
+        brand = label(sidebar, 'NAVAL SHIP\nWEIGHT\nESTIMATOR', 13, True, '#FFFFFF')
+        side.Add(brand, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        side.Add(label(sidebar, 'DESIGN WORKSPACE', 8, True, '#8FA7C1'), 0, wx.LEFT | wx.TOP | wx.BOTTOM, 24)
+        self.navigation = []
+        titles = [('01', 'Input Data'), ('02', 'Regression Model'), ('03', 'Weight Estimation'), ('04', 'Insights & 3D')]
+        for index, (number, name) in enumerate(titles):
+            nav = buttons.GenButton(sidebar, label=f'{number}   {name}', style=wx.BORDER_NONE)
+            nav.SetBezelWidth(0)
+            nav.SetMinSize((186, 48))
+            nav.SetForegroundColour('#B9CBE0')
+            nav.SetBackgroundColour(NAVY)
+            nav.Bind(wx.EVT_BUTTON, lambda event, i=index: self.tabs.SetSelection(i))
+            self.navigation.append(nav)
+            side.Add(nav, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        side.AddStretchSpacer()
+        side.Add(label(sidebar, 'LOCAL ANALYSIS', 8, True, '#70D8CC'), 0, wx.LEFT | wx.BOTTOM, 24)
+        side.Add(label(sidebar, '데이터는 이 PC에서만\n처리됩니다.', 9, False, '#B9CBE0'), 0, wx.LEFT | wx.BOTTOM, 24)
+        sidebar.SetSizer(side)
+        layout.Add(sidebar, 0, wx.EXPAND)
+        content = wx.Panel(panel)
+        content.SetBackgroundColour(BG)
+        body = wx.BoxSizer(wx.VERTICAL)
+        heading = wx.BoxSizer(wx.HORIZONTAL)
+        title_group = wx.BoxSizer(wx.VERTICAL)
+        title_group.Add(label(content, 'NAVAL ENGINEERING  /  LIGHTSHIP WEIGHT', 8, True, '#788BA0'), 0, wx.BOTTOM, 10)
+        self.page_heading = label(content, '실적함 데이터', 23, True)
+        title_group.Add(self.page_heading)
+        heading.Add(title_group, 1)
+        self.state = label(content, '●  NO DATA', 10, True, '#7D8DA0')
+        self.state.SetMinSize((160, -1))
+        heading.Add(self.state, 0, wx.ALIGN_CENTER_VERTICAL)
+        body.Add(heading, 0, wx.EXPAND | wx.ALL, 24)
+        self.notice = label(content, self.source_text, 10, color='#6F8398')
+        body.Add(self.notice, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        self.tabs = Workspace(content, self.select_page)
         self.build_input()
         self.build_model()
         self.build_design()
         self.build_graph()
-        layout.Add(self.tabs, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
+        body.Add(self.tabs, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        content.SetSizer(body)
+        layout.Add(content, 1, wx.EXPAND)
         panel.SetSizer(layout)
         self.CreateStatusBar()
-        self.SetStatusText('준비 | 순항속력 not = knot(노트), 경하중량 tonne, 치수 m | 모든 자료는 이 PC에서 처리됩니다.')
+        self.SetStatusText('순항속력 not = knot(노트)  ·  중량 tonne  ·  치수 m')
+        self.select_page(0)
         self.Centre()
+
+    def select_page(self, index):
+        headings = ['실적함 데이터', '회귀모형 · 실적 비교', '설계 함정 중량 추정', '그래프 · 3차원 분석']
+        self.page_heading.SetLabel(headings[index])
+        for i, nav in enumerate(self.navigation):
+            nav.SetBackgroundColour('#215472' if i == index else NAVY)
+            nav.SetForegroundColour('#FFFFFF' if i == index else '#B9CBE0')
+            nav.Refresh()
+        self.Layout()
 
     def page(self, title, scroll=False):
         p = scrolled.ScrolledPanel(self.tabs) if scroll else wx.Panel(self.tabs)
-        p.SetBackgroundColour('#FFFFFF')
+        p.SetBackgroundColour(BG)
         s = wx.BoxSizer(wx.VERTICAL)
         p.SetSizer(s)
         self.tabs.AddPage(p, title)
         return p, s
 
     def build_input(self):
-        p, s = self.page('1. 실적함 데이터')
+        p, s = self.page('Input Data')
+        actions = Card(p)
+        a = wx.BoxSizer(wx.VERTICAL)
+        a.Add(label(actions, 'Input File', 16, True), 0, wx.LEFT | wx.TOP, 22)
+        a.Add(label(actions, '양식을 내려받아 실적함 데이터를 작성한 뒤, 업데이트한 Excel 파일을 업로드하세요.', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.TOP, 22)
         row = wx.BoxSizer(wx.HORIZONTAL)
-        for name, callback in [('엑셀 양식 저장', self.save_template), ('실적함 엑셀 불러오기', self.open_excel),
-                               ('실적함 자료 추가', self.append_excel), ('현재 입력자료 저장', self.save_input),
-                               ('가상 예제 보기', self.load_example)]:
-            row.Add(button(p, name, callback), 0, wx.RIGHT, 8)
-        s.Add(row, 0, wx.ALL, 16)
-        for text in ['① 양식을 저장하여 Excel에서 작성한 뒤 불러오면 회귀계수가 자동으로 계산됩니다.',
-                     '필수 열: 함종, 경하중량(tonne), 길이·폭·깊이(m), 순항속력(not). 함명은 선택 항목입니다.',
-                     '함종: 구축함 / 호위함 / 고속함 / 지원함. 호위함은 최소 4척과 독립적인 크기·속력 변화가 필요합니다.',
-                     '자료가 늘면 기존 자료와 합친 엑셀을 다시 열거나 “실적함 자료 추가”를 사용한 뒤 입력자료를 저장하세요.']:
-            s.Add(label(p, text), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
-        self.counts = label(p, '불러온 자료 없음', 11, True, ACCENT)
-        s.Add(self.counts, 0, wx.LEFT | wx.BOTTOM, 16)
-        self.input_table = Table(p)
+        self.template_button = button(actions, 'Download Input File Template', self.save_template)
+        self.upload_button = button(actions, 'Input File Upload', self.open_excel, 'primary')
+        row.Add(self.template_button, 0, wx.RIGHT, 12)
+        row.Add(self.upload_button, 0, wx.RIGHT, 12)
+        row.AddStretchSpacer()
+        row.Add(button(actions, '가상 예제', self.load_example))
+        a.Add(row, 0, wx.EXPAND | wx.ALL, 22)
+        actions.SetSizer(a)
+        s.Add(actions, 0, wx.EXPAND | wx.BOTTOM, 18)
+        statrow = wx.BoxSizer(wx.HORIZONTAL)
+        self.stat_values = {}
+        for typ in ['전체 실적함'] + SHIP_TYPES:
+            tile = Card(p)
+            ts = wx.BoxSizer(wx.VERTICAL)
+            ts.Add(label(tile, typ, 9, color='#7A8DA2'), 0, wx.LEFT | wx.TOP, 16)
+            value = label(tile, '—', 23, True, ACCENT if typ == '전체 실적함' else INK)
+            ts.Add(value, 0, wx.LEFT | wx.BOTTOM | wx.TOP, 16)
+            tile.SetSizer(ts)
+            statrow.Add(tile, 1, wx.RIGHT, 10 if typ != SHIP_TYPES[-1] else 0)
+            self.stat_values[typ] = value
+        s.Add(statrow, 0, wx.EXPAND | wx.BOTTOM, 18)
+        data_card = Card(p)
+        ds = wx.BoxSizer(wx.VERTICAL)
+        head = wx.BoxSizer(wx.HORIZONTAL)
+        head.Add(label(data_card, '실적함 데이터 미리보기', 12, True), 1, wx.ALIGN_CENTER_VERTICAL)
+        head.Add(button(data_card, '입력자료 저장', self.save_input))
+        ds.Add(head, 0, wx.EXPAND | wx.ALL, 18)
+        self.counts = label(data_card, 'Input File Upload로 Excel 파일을 불러오세요.', 9, color='#6F8398')
+        ds.Add(self.counts, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        self.input_table = Table(data_card)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
-        s.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
+        ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
+        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 not   |   호위함 최소 4척, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
+        data_card.SetSizer(ds)
+        s.Add(data_card, 1, wx.EXPAND)
 
     def build_model(self):
-        p, s = self.page('2. 회귀계수 · 실적 비교')
-        s.Add(label(p, '호위함 회귀 → 공통 K, α, β 고정 → 다른 함종의 D_T 추정', 14, True), 0, wx.ALL, 16)
-        s.Add(label(p, 'W = S × K × (L×B×H)^α × Vc^β × D_T    |    호위함 D_T=1, Vc=순항속력(not)'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
-        row = wx.BoxSizer(wx.HORIZONTAL)
-        self.correction = wx.CheckBox(p, label='로그 역변환 편향 보정(S) 적용')
+        p, s = self.page('Regression Model')
+        intro = Card(p)
+        info = wx.BoxSizer(wx.VERTICAL)
+        top = wx.BoxSizer(wx.HORIZONTAL)
+        top.Add(label(intro, 'Regression Model', 16, True), 1, wx.ALIGN_CENTER_VERTICAL)
+        top.Add(button(intro, '분석 결과 Excel 저장', self.save_report))
+        info.Add(top, 0, wx.EXPAND | wx.ALL, 20)
+        info.Add(label(intro, 'W = S × K × (L×B×H)^alpha × Vc^beta × D_T    |    호위함 D_T = 1', 11, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        self.correction = wx.CheckBox(intro, label='로그 역변환 편향 보정(S) 적용')
         self.correction.Bind(wx.EVT_CHECKBOX, self.change_correction)
-        row.Add(self.correction, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 20)
-        row.Add(button(p, '계수·실적 비교 엑셀 저장', self.save_report))
-        s.Add(row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
-        self.coefficients = label(p, '실적함 자료를 불러오면 계수가 표시됩니다.', 13, True, ACCENT)
-        s.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
-        self.dt_table = Table(p)
-        self.dt_table.SetMinSize((-1, 150))
-        s.Add(self.dt_table, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
-        self.metrics = label(p, '', 11, True)
-        s.Add(self.metrics, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-        self.model_warning = label(p, '표시 지표는 학습 자료의 적합 오차이며, 새로운 함정의 예측 성능을 보장하지 않습니다.', 10, False, '#955200')
-        s.Add(self.model_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-        self.result_table = Table(p)
-        s.Add(self.result_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
+        info.Add(self.correction, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
+        info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
+        intro.SetSizer(info)
+        s.Add(intro, 0, wx.EXPAND | wx.BOTTOM, 18)
+        tiles = wx.BoxSizer(wx.HORIZONTAL)
+        self.coefficient_values = {}
+        for name, description in [('K', '기본 회귀계수'), ('alpha', '크기 지수'), ('beta', '속력 지수'), ('S', '편향 보정배율')]:
+            tile = Card(p)
+            ts = wx.BoxSizer(wx.VERTICAL)
+            ts.Add(label(tile, name + '  /  ' + description, 9, color='#7A8DA2'), 0, wx.LEFT | wx.TOP, 16)
+            value = label(tile, '—', 23, True, ACCENT)
+            ts.Add(value, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 16)
+            self.coefficient_values[name] = value
+            tile.SetSizer(ts)
+            tiles.Add(tile, 1, wx.RIGHT, 10 if name != 'S' else 0)
+        s.Add(tiles, 0, wx.EXPAND | wx.BOTTOM, 18)
+        bottom = wx.BoxSizer(wx.HORIZONTAL)
+        dt = Card(p)
+        dt.SetMinSize((270, -1))
+        ds = wx.BoxSizer(wx.VERTICAL)
+        ds.Add(label(dt, '함종별 설계계수', 12, True), 0, wx.ALL, 18)
+        ds.Add(label(dt, '호위함 계수 고정 후 D_T 추정', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        self.dt_table = Table(dt)
+        ds.Add(self.dt_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        dt.SetSizer(ds)
+        bottom.Add(dt, 0, wx.EXPAND | wx.RIGHT, 18)
+        compare = Card(p)
+        cs = wx.BoxSizer(wx.VERTICAL)
+        cs.Add(label(compare, '실적 중량 비교', 12, True), 0, wx.ALL, 18)
+        self.metrics = label(compare, '회귀모형을 추정하면 적합 지표가 표시됩니다.', 10, True)
+        cs.Add(self.metrics, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        self.model_warning = label(compare, '학습자료에 대한 적합 오차이며 독립 검증 성능이 아닙니다.', 9, color='#A37B35')
+        cs.Add(self.model_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        self.result_table = Table(compare)
+        cs.Add(self.result_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        compare.SetSizer(cs)
+        bottom.Add(compare, 1, wx.EXPAND)
+        s.Add(bottom, 1, wx.EXPAND)
 
     def build_design(self):
-        p, s = self.page('3. 설계 함정 중량 추정', scroll=True)
+        p, s = self.page('Weight Estimation', scroll=True)
         self.design_panel = p
-        s.Add(label(p, '새 함정의 제원을 입력하세요', 19, True), 0, wx.ALL, 24)
-        s.Add(label(p, '실적함에서 산출한 회귀계수와 함종별 D_T를 적용합니다. 경하중량 입력은 필요하지 않습니다.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
-        grid = wx.FlexGridSizer(cols=2, vgap=16, hgap=20)
-        grid.Add(label(p, '함종', 12), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.ship_type = wx.Choice(p, choices=SHIP_TYPES)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        params = Card(p)
+        ps = wx.BoxSizer(wx.VERTICAL)
+        ps.Add(label(params, 'Design Parameters', 16, True), 0, wx.ALL, 22)
+        ps.Add(label(params, '새 함정의 함종과 제원을 입력하세요.', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
+        ps.Add(label(params, '함종', 10, True), 0, wx.LEFT | wx.BOTTOM, 22)
+        self.ship_type = wx.Choice(params, choices=SHIP_TYPES, size=(-1, 36))
         self.ship_type.SetStringSelection('호위함')
-        grid.Add(self.ship_type, 0, wx.EXPAND)
+        ps.Add(self.ship_type, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
+        fields = wx.FlexGridSizer(cols=2, vgap=20, hgap=16)
+        fields.AddGrowableCol(0, 1)
+        fields.AddGrowableCol(1, 1)
         self.inputs = []
         for name, value in [('길이 L (m)', '100'), ('폭 B (m)', '15'), ('깊이 H (m)', '8'), ('순항속력 Vc (not)', '16')]:
-            grid.Add(label(p, name, 12), 0, wx.ALIGN_CENTER_VERTICAL)
-            field = wx.TextCtrl(p, value=value, size=(250, 34))
+            part = wx.Panel(params)
+            part.SetBackgroundColour('#FFFFFF')
+            fs = wx.BoxSizer(wx.VERTICAL)
+            fs.Add(label(part, name, 9, True), 0, wx.BOTTOM, 8)
+            field = wx.TextCtrl(part, value=value, size=(140, 40))
             field.Bind(wx.EVT_TEXT, self.clear_prediction)
             self.inputs.append(field)
-            grid.Add(field, 0, wx.EXPAND)
+            fs.Add(field, 0, wx.EXPAND)
+            part.SetSizer(fs)
+            fields.Add(part, 1, wx.EXPAND)
+        ps.Add(fields, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
         self.ship_type.Bind(wx.EVT_CHOICE, self.clear_prediction)
-        s.Add(grid, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
-        self.estimate_button = button(p, '경하중량 추정', self.estimate)
+        self.estimate_button = button(params, '경하중량 추정', self.estimate, 'primary')
         self.estimate_button.Enable(False)
-        s.Add(self.estimate_button, 0, wx.LEFT | wx.BOTTOM, 24)
-        self.prediction = label(p, '— tonne', 34, True, ACCENT)
-        s.Add(self.prediction, 0, wx.LEFT | wx.BOTTOM, 24)
-        self.prediction_detail = label(p, '실적함 자료를 불러온 뒤 추정할 수 있습니다.', 11)
-        s.Add(self.prediction_detail, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
-        self.prediction_warning = label(p, '', 11, False, '#955200')
-        s.Add(self.prediction_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
-        s.Add(label(p, '순항속력 참고값(not): 구축함 17–20 / 호위함 15–18 / 고속함 15–20 / 지원함 12–15'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
-        s.Add(label(p, '참고값은 자동 환산이나 입력 제한에 사용하지 않습니다. 최대속력과 혼용하지 마세요.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 24)
+        ps.Add(self.estimate_button, 0, wx.EXPAND | wx.ALL, 22)
+        ps.Add(label(params, '경하중량을 입력할 필요 없이 제원만으로 추정합니다.', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 22)
+        params.SetSizer(ps)
+        row.Add(params, 1, wx.EXPAND | wx.RIGHT, 18)
+        result = Card(p, NAVY)
+        rs = wx.BoxSizer(wx.VERTICAL)
+        rs.Add(label(result, 'ESTIMATION RESULT', 9, True, '#74D9CD'), 0, wx.LEFT | wx.TOP, 26)
+        rs.Add(label(result, '예측 경하중량', 17, True, '#FFFFFF'), 0, wx.LEFT | wx.TOP | wx.BOTTOM, 26)
+        self.prediction = label(result, '— tonne', 31, True, '#75E0D3')
+        rs.Add(self.prediction, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        self.prediction_detail = label(result, '실적함 데이터를 업로드하면 추정할 수 있습니다.', 10, color='#C0D2E5')
+        rs.Add(self.prediction_detail, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        self.prediction_warning = label(result, '', 10, color='#F3CB87')
+        rs.Add(self.prediction_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        rs.AddStretchSpacer()
+        rs.Add(label(result, '호위함 기반 회귀모형 + 함종별 D_T', 10, True, '#FFFFFF'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        info = label(result, '학습자료 범위를 벗어난 제원은 외삽으로 안내합니다.\n예측값은 설계 검토를 위한 추정치입니다.', 9, color='#C0D2E5')
+        rs.Add(info, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        result.SetSizer(rs)
+        row.Add(result, 1, wx.EXPAND)
+        s.Add(row, 0, wx.EXPAND | wx.BOTTOM, 18)
+        reference = Card(p)
+        ref = wx.BoxSizer(wx.VERTICAL)
+        ref.Add(label(reference, '순항속력 참고 범위  /  not = knot(노트)', 10, True), 0, wx.ALL, 18)
+        ref.Add(label(reference, '구축함 17–20   ·   호위함 15–18   ·   고속함 15–20   ·   지원함 12–15', 10, color='#6F8398'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        reference.SetSizer(ref)
+        s.Add(reference, 0, wx.EXPAND)
         p.SetupScrolling(scroll_x=False)
 
     def build_graph(self):
@@ -196,6 +371,7 @@ class EstimatorFrame(wx.Frame):
         s.Add(label(p, '곡면: X=LBH(m³), Y=순항속력(not), Z=경하중량(tonne). 빨간 점=실적, 선=실적−예측 차이. 마우스로 회전할 수 있습니다.'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.figure = Figure(figsize=(9, 5), facecolor='white', constrained_layout=True)
         self.canvas = FigureCanvasWxAgg(p, wx.ID_ANY, self.figure)
+        self.canvas.SetMinSize((200, 160))
         s.Add(self.canvas, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
         self.toolbar = NavigationToolbar2WxAgg(self.canvas)
         self.toolbar.Realize()
@@ -217,11 +393,11 @@ class EstimatorFrame(wx.Frame):
 
     def save_template(self, event=None):
         try:
-            self.save_file('엑셀 입력 양식 저장', '실적함_입력양식.xlsx', workbook_bytes(pd.DataFrame(columns=COLUMNS)))
+            self.save_file('Download Input File Template', '실적함_입력양식.xlsx', workbook_bytes(pd.DataFrame(columns=COLUMNS)))
         except Exception as exc:
             self.error(exc)
 
-    def load_file(self, append=False):
+    def load_file(self):
         with wx.FileDialog(self, '실적함 엑셀 선택', wildcard='Excel files (*.xlsx)|*.xlsx', style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
                 return
@@ -235,12 +411,10 @@ class EstimatorFrame(wx.Frame):
                             return
                         sheet = choice.GetStringSelection()
                 frame = read_excel(book, sheet)
-            if append and self.synthetic:
-                raise ValueError('가상 예제와 실제 자료를 합칠 수 없습니다. 실적함 엑셀 불러오기로 실제 자료를 먼저 여세요.')
             with wx.BusyCursor():
-                self.session.load(frame, append=append)
+                self.session.load(frame)
                 self.synthetic = False
-                self.source_text = ('자료 추가: ' if append else '불러온 자료: ') + path.name + ' / ' + sheet
+                self.source_text = path.name + '  /  ' + sheet
                 self.refresh()
             if self.session.issue:
                 self.error(self.session.issue)
@@ -250,10 +424,7 @@ class EstimatorFrame(wx.Frame):
             self.error(exc)
 
     def open_excel(self, event=None):
-        self.load_file(False)
-
-    def append_excel(self, event=None):
-        self.load_file(True)
+        self.load_file()
 
     def load_example(self, event=None):
         self.session.load(example())
@@ -292,6 +463,9 @@ class EstimatorFrame(wx.Frame):
         if data is not None:
             self.input_table.show_frame(data)
             counts = data['함종'].value_counts()
+            self.stat_values['전체 실적함'].SetLabel(str(len(data)))
+            for typ in SHIP_TYPES:
+                self.stat_values[typ].SetLabel(str(counts.get(typ, 0)))
             summary = f'전체 {len(data)}척  |  ' + '  ·  '.join(f'{t} {counts.get(t, 0)}척' for t in SHIP_TYPES)
             duplicate = data.duplicated(subset=COLUMNS[1:]).sum()
             if duplicate:
@@ -299,22 +473,30 @@ class EstimatorFrame(wx.Frame):
             self.counts.SetLabel(summary)
         if fitted is None:
             self.coefficients.SetLabel(self.session.issue)
+            for field in self.coefficient_values.values():
+                field.SetLabel('—')
             self.metrics.SetLabel('')
             self.dt_table.show_frame(pd.DataFrame(columns=['함종', 'D_T', '실적선 수']))
             self.result_table.show_frame(pd.DataFrame())
             self.prediction_detail.SetLabel(self.session.issue)
         else:
-            self.coefficients.SetLabel(f'K = {fitted.k:.8g}     α = {fitted.alpha:.7g}     β = {fitted.beta:.7g}     S = {fitted.smearing:.7g}')
+            for name, value in zip(['K', 'alpha', 'beta', 'S'], [fitted.k, fitted.alpha, fitted.beta, fitted.smearing]):
+                self.coefficient_values[name].SetLabel(f'{value:.6g}')
+            self.coefficients.SetLabel(f'K = {fitted.k:.8g}     alpha = {fitted.alpha:.7g}     beta = {fitted.beta:.7g}     S = {fitted.smearing:.7g}')
             self.dt_table.show_frame(fitted.coefficients)
-            self.result_table.show_frame(fitted.results)
-            self.metrics.SetLabel('   |   '.join(f'{k}: {v:.4g}' for k, v in fitted.metrics.items()))
+            comparison = ['함명', '함종', '경하중량', '예측중량', '오차', '오차율(%)']
+            self.result_table.show_frame(fitted.results[comparison])
+            items = [f'{k}: {v:.4g}' for k, v in fitted.metrics.items()]
+            self.metrics.SetLabel('   |   '.join(items[:2]) + '\n' + '   |   '.join(items[2:]))
             warnings = ['학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
             if fitted.condition > 30:
                 warnings.append('호위함 자료의 공선성이 높아 계수가 불안정할 수 있습니다.')
             if (fitted.coefficients['실적선 수'] < 5).any():
                 warnings.append('일부 함종은 실적함이 5척 미만입니다.')
             self.model_warning.SetLabel(' '.join(warnings))
-            self.model_warning.Wrap(1120)
+            self.model_warning.Wrap(max(300, self.result_table.GetParent().GetClientSize().width-36))
+        self.state.SetLabel('●  DEMO DATA' if self.synthetic else ('●  MODEL READY' if fitted else '●  DATA REQUIRED'))
+        self.state.SetForegroundColour('#B37A23' if self.synthetic else (ACCENT if fitted else '#7D8DA0'))
         self.draw_graph()
         self.Layout()
         self.SetStatusText('가상 예제 사용 중' if self.synthetic else ('회귀모형 추정 완료' if fitted else self.session.issue))
@@ -331,7 +513,7 @@ class EstimatorFrame(wx.Frame):
             if self.synthetic:
                 warning = '가상 예제 계수로 계산한 결과입니다. 실제 설계에 사용하지 마세요. ' + warning
             self.prediction_warning.SetLabel(warning)
-            self.prediction_warning.Wrap(1100)
+            self.prediction_warning.Wrap(max(250, self.prediction_warning.GetParent().GetClientSize().width-52))
             self.Layout()
             self.design_panel.FitInside()
         except (ValueError, OverflowError) as exc:
@@ -425,12 +607,16 @@ def smoke_test(frame, output):
     checks.append('Comparison chart, 3D surface and log plane: PASS')
     report = frame.session.report_bytes()
     assert len(pd.ExcelFile(BytesIO(report)).sheet_names) == 5
-    old_count = len(frame.session.data)
-    frame.session.load(data.iloc[:1], append=True)
+    replacement = data.copy()
+    replacement['경하중량'] *= 1.1
+    frame.session.load(replacement)
     frame.refresh()
-    assert len(frame.session.data) == old_count + 1
+    assert len(frame.session.data) == len(replacement)
+    assert frame.template_button.GetLabel() == 'Download Input File Template'
+    assert frame.upload_button.GetLabel() == 'Input File Upload'
+    assert not hasattr(frame, 'append_excel')
     assert frame.prediction.GetLabel() == '— tonne'
-    checks.append('Report export, appended observations, refit and stale result clearing: PASS')
+    checks.append('Report export, replacement upload, renamed controls and stale result clearing: PASS')
     Path(output).write_text('\n'.join(checks), encoding='utf-8')
 
 
@@ -453,16 +639,23 @@ def main():
                 smoke_test(frame, output)
                 if '--capture-path' in sys.argv:
                     frame.synthetic = True
+                    frame.source_text = '가상 예제 — 기능 확인용 데이터이며 실제 설계값이 아닙니다.'
+                    frame.refresh()
                     frame.tabs.SetSelection(2)
                     frame.estimate()
                     frame.Raise()
-                    wx.Yield()
-                    bitmap = wx.Bitmap(frame.GetSize().width, frame.GetSize().height)
-                    dc = wx.MemoryDC(bitmap)
-                    pos = frame.GetScreenPosition()
-                    dc.Blit(0, 0, bitmap.GetWidth(), bitmap.GetHeight(), wx.ScreenDC(), pos.x, pos.y)
-                    dc.SelectObject(wx.NullBitmap)
-                    bitmap.SaveFile(sys.argv[sys.argv.index('--capture-path') + 1], wx.BITMAP_TYPE_PNG)
+                    target = Path(sys.argv[sys.argv.index('--capture-path') + 1])
+                    for index, suffix in [(2, ''), (0, '_input'), (1, '_model')]:
+                        frame.tabs.SetSelection(index)
+                        frame.Refresh()
+                        frame.Update()
+                        wx.Yield()
+                        bitmap = wx.Bitmap(frame.GetSize().width, frame.GetSize().height)
+                        dc = wx.MemoryDC(bitmap)
+                        pos = frame.GetScreenPosition()
+                        dc.Blit(0, 0, bitmap.GetWidth(), bitmap.GetHeight(), wx.ScreenDC(), pos.x, pos.y)
+                        dc.SelectObject(wx.NullBitmap)
+                        bitmap.SaveFile(str(target.with_name(target.stem + suffix + target.suffix)), wx.BITMAP_TYPE_PNG)
                 code = 0
             except Exception:
                 Path(output).write_text(traceback.format_exc(), encoding='utf-8')
