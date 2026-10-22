@@ -302,7 +302,7 @@ class Table(dv.DataViewListCtrl):
 
 class EstimatorFrame(wx.Frame):
     def __init__(self):
-        super().__init__(None, title='Naval Ship Weight Estimator', size=(1280, 900))
+        super().__init__(None, title='Naval Ship Weight Simulator', size=(1280, 900))
         self.SetMinSize((1020, 740))
         self.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=UI_ENGLISH_FONT))
         self.session = EstimatorSession()
@@ -319,7 +319,7 @@ class EstimatorFrame(wx.Frame):
         sidebar.SetBackgroundColour(NAVY)
         sidebar.SetMinSize((210, -1))
         side = wx.BoxSizer(wx.VERTICAL)
-        brand = label(sidebar, 'Naval Ship\nWeight\nEstimator', 22, True, '#FFFFFF')
+        brand = label(sidebar, 'Naval Ship\nWeight\nSimulator', 22, True, '#FFFFFF')
         side.Add(brand, 0, wx.ALL, 24)
         rule = wx.Panel(sidebar, size=(58, 3))
         rule.SetBackgroundColour('#6FE0D4')
@@ -447,7 +447,7 @@ class EstimatorFrame(wx.Frame):
         self.input_table = Table(data_card, centered=True)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
         ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
-        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   자료가 있는 함종만 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
+        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 kn   |   MAPE 최소화 · 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
         data_card.SetSizer(ds)
         s.Add(data_card, 1, wx.EXPAND)
 
@@ -493,7 +493,7 @@ class EstimatorFrame(wx.Frame):
         ds = wx.BoxSizer(wx.VERTICAL)
         caption, self.dt_symbol, _ = math_caption(dt, 'DT', '함종별 설계계수')
         ds.Add(caption, 0, wx.ALL, 18)
-        ds.Add(label(dt, '전체 자료로 회귀계수와 동시 산출', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        ds.Add(label(dt, 'MAPE 최소화로 회귀계수와 동시 산출', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         self.dt_table = Table(dt)
         ds.Add(self.dt_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         dt.SetSizer(ds)
@@ -639,7 +639,7 @@ class EstimatorFrame(wx.Frame):
         self.draw_graph()
 
     def error(self, message):
-        wx.MessageBox(str(message), 'Naval Ship Weight Estimator', wx.OK | wx.ICON_ERROR, self)
+        wx.MessageBox(str(message), 'Naval Ship Weight Simulator', wx.OK | wx.ICON_ERROR, self)
 
     def save_file(self, title, default, payload):
         with wx.FileDialog(self, title, defaultFile=default, wildcard='Excel files (*.xlsx)|*.xlsx',
@@ -726,7 +726,7 @@ class EstimatorFrame(wx.Frame):
                 control.SetStringSelection(selected)
             control.Enable(bool(choices))
         self.model_reference.SetLabel('Vc: 순항속력(kn)    |    기준 함종: ' +
-                                      (f'{fitted.reference}(설계계수 1)' if fitted else '데이터 업로드 후 결정'))
+                                      (f'{fitted.reference}(설계계수 1) · MAPE 최소화' if fitted else '데이터 업로드 후 결정'))
         if data is not None:
             self.input_table.show_frame(data)
             counts = data['함종'].value_counts()
@@ -754,7 +754,8 @@ class EstimatorFrame(wx.Frame):
             self.coefficients.Hide()
             self.dt_table.show_frame(fitted.coefficients)
             self.refresh_comparison()
-            warnings = [f'전체 {len(data)}척 동시 추정 · 추정계수 {fitted.n_parameters}개 · 잔차 자유도 {fitted.residual_df}.',
+            warnings = [f'MAPE 직접 최소화 · 전체 {len(data)}척 동시 추정 · 추정계수 {fitted.n_parameters}개 · 잔차 자유도 {fitted.residual_df}.',
+                        f'기존 로그회귀 MAPE {fitted.baseline_mape:.4g}% → 현재 {fitted.metrics["MAPE (%)"]:.4g}%.',
                         '학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
             absent = [typ for typ in SHIP_TYPES if typ not in available]
             if absent:
@@ -982,6 +983,9 @@ def smoke_test(frame, output):
     assert not hasattr(frame.session, 'correction')
     assert set(frame.coefficient_values) == {'K', 'alpha', 'beta'}
     assert frame.session.fitted.smearing == 1.0
+    assert frame.session.fitted.metrics['MAPE (%)'] <= frame.session.fitted.baseline_mape + 1e-8
+    assert frame.GetTitle() == 'Naval Ship Weight Simulator'
+    checks.append('Simulator branding and direct MAPE objective no worse than log-regression baseline: PASS')
     assert frame.copyright.GetLabel() == 'Copyright by Naval Ship Design Technology Division'
     assert all(nav.GetFont().GetWeight() == wx.FONTWEIGHT_BOLD for nav in frame.navigation)
     assert frame.equation_bitmap.GetBitmap().IsOk() and frame.header_illustration.GetBitmap().IsOk()
@@ -1012,7 +1016,7 @@ def main():
         # hosts may use a Times-compatible serif; no Microsoft font is bundled.
         UI_ENGLISH_FONT = next((name for name in ['Liberation Serif', 'Times', 'Nimbus Roman']
                                 if wx.FontEnumerator.IsValidFacename(name)), ENGLISH_FONT)
-    app.SetAppName('Naval Ship Weight Estimator')
+    app.SetAppName('Naval Ship Weight Simulator')
     frame = EstimatorFrame()
     frame.Show()
     if os.environ.get('NAVAL_ESTIMATOR_READY'):

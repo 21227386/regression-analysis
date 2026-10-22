@@ -28,7 +28,7 @@ class RegressionTests(unittest.TestCase):
         with self.assertRaises(ValueError): fit(example().head(3), '호위함')
 
     def test_smearing_and_error_definition(self):
-        result = fit(example(), '호위함', True)
+        result = fit(example(), '호위함')
         self.assertGreaterEqual(result.smearing, 1)
         np.testing.assert_allclose(result.results['오차'], result.results['예측중량']-result.results['경하중량'])
 
@@ -38,14 +38,14 @@ class JointTests(unittest.TestCase):
     def test_other_types_contribute_to_common_slopes(self):
         df = example()
         first = fit(df)
-        mask = df['함종'] == '구축함'
+        mask = df['함종'] != first.reference
         df.loc[mask, '경하중량'] *= (df.loc[mask, '길이'] / 100) ** 2
         second = fit(df)
         self.assertGreater(abs(second.alpha - first.alpha), .01)
         self.assertEqual(second.coefficients.set_index('함종').loc[second.reference, 'D_T'], 1)
 
     def test_reference_changes_scale_but_not_predictions_for_noisy_data(self):
-        for correction in [False, True]:
+        for correction in [False]:
             first = fit(example(), '상륙함', correction)
             for reference in ['호위함', '구축함', '고속함']:
                 second = fit(example(), reference, correction)
@@ -122,3 +122,30 @@ class AvailableTypeTests(unittest.TestCase):
         np.testing.assert_allclose([first.k, first.alpha, first.beta], [shuffled.k, shuffled.alpha, shuffled.beta])
         fixed = fit(data, reference='호위함')
         np.testing.assert_allclose(first.results['예측중량'], fixed.results['예측중량'])
+
+class MapeObjectiveTests(unittest.TestCase):
+    def test_known_global_optimum_with_repeated_dimensions(self):
+        # At each identical design, MAPE is minimized at the lower observation,
+        # not the geometric mean or the unweighted median.
+        base = example().query("함종 == '호위함'").head(6).copy()
+        base['경하중량'] = .035 * (base['길이'] * base['폭'] * base['깊이']) ** 1.05 * base['순항속력'] ** .25
+        for multipliers in [[1., 10.], [1., 2., 3.]]:
+            rows = pd.concat([base.assign(경하중량=base['경하중량'] * factor) for factor in multipliers], ignore_index=True)
+            fitted = fit(rows)
+            expected = 100 * np.mean([abs(1 / factor - 1) for factor in multipliers])
+            self.assertAlmostEqual(fitted.metrics['MAPE (%)'], expected, places=7)
+            np.testing.assert_allclose([fitted.k, fitted.alpha, fitted.beta], [.035, 1.05, .25], rtol=1e-6)
+            self.assertLess(fitted.metrics['MAPE (%)'], fitted.baseline_mape)
+
+    def test_direct_objective_and_mass_scaling(self):
+        data = example()
+        first = fit(data)
+        self.assertAlmostEqual(first.metrics['MAPE (%)'], first.results['절대오차율(%)'].mean())
+        self.assertLessEqual(first.metrics['MAPE (%)'], first.baseline_mape + 1e-8)
+        data['경하중량'] *= 100
+        scaled = fit(data)
+        self.assertAlmostEqual(first.metrics['MAPE (%)'], scaled.metrics['MAPE (%)'], places=7)
+        np.testing.assert_allclose(scaled.results['예측중량'], first.results['예측중량'] * 100, rtol=1e-7)
+        self.assertEqual(first.smearing, 1)
+        with self.assertRaisesRegex(ValueError, 'MAPE 직접 최소화'):
+            fit(data, correction=True)

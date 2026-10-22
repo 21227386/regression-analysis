@@ -26,11 +26,11 @@ static void pump(void) {
 static void show_loader(void) {
     INITCOMMONCONTROLSEX controls={sizeof(controls),ICC_PROGRESS_CLASS}; InitCommonControlsEx(&controls);
     WNDCLASSW cls={0}; cls.lpfnWndProc=loader_proc; cls.hInstance=GetModuleHandleW(NULL);
-    cls.lpszClassName=L"NavalEstimatorDesktopLoader"; cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
+    cls.lpszClassName=L"NavalSimulatorDesktopLoader"; cls.hbrBackground=(HBRUSH)(COLOR_WINDOW+1);
     cls.hCursor=LoadCursorW(NULL,IDC_ARROW); RegisterClassW(&cls);
     int x=(GetSystemMetrics(SM_CXSCREEN)-620)/2, y=(GetSystemMetrics(SM_CYSCREEN)-210)/2;
-    loader=CreateWindowExW(0,cls.lpszClassName,L"Naval Ship Weight Estimator",WS_CAPTION|WS_SYSMENU|WS_VISIBLE,x,y,620,210,NULL,NULL,cls.hInstance,NULL);
-    CreateWindowExW(0,L"STATIC",L"Naval Ship Weight Estimator",WS_CHILD|WS_VISIBLE,24,20,560,28,loader,NULL,cls.hInstance,NULL);
+    loader=CreateWindowExW(0,cls.lpszClassName,L"Naval Ship Weight Simulator",WS_CAPTION|WS_SYSMENU|WS_VISIBLE,x,y,620,210,NULL,NULL,cls.hInstance,NULL);
+    CreateWindowExW(0,L"STATIC",L"Naval Ship Weight Simulator",WS_CHILD|WS_VISIBLE,24,20,560,28,loader,NULL,cls.hInstance,NULL);
     status_text=CreateWindowExW(0,L"STATIC",L"Preparing the desktop application...",WS_CHILD|WS_VISIBLE,24,60,560,30,loader,NULL,cls.hInstance,NULL);
     progress=CreateWindowExW(0,PROGRESS_CLASSW,NULL,WS_CHILD|WS_VISIBLE,24,105,560,24,loader,NULL,cls.hInstance,NULL);
     SendMessageW(progress,PBM_SETRANGE,0,MAKELPARAM(0,100));
@@ -189,21 +189,21 @@ static int start_application(void) {
     HANDLE input=INVALID_HANDLE_VALUE, lock=NULL;
     int owns_lock=0; DWORD exit_code=1;
     SetConsoleOutputCP(CP_UTF8);
-    SetConsoleTitleW(L"Naval Ship Weight Estimator");
+    SetConsoleTitleW(L"Naval Ship Weight Simulator");
     DWORD len=GetModuleFileNameW(NULL,self,CAP);
     if (!len || len>=CAP) goto fail;
     len=GetEnvironmentVariableW(L"LOCALAPPDATA",parent,CAP);
     if (!len || len>=CAP) { if (!GetTempPathW(CAP,parent)) goto fail; }
-    if (!join(appdir,parent,L"NavalShipWeightEstimator") || !directory(appdir)) goto fail;
-    if (!join(cache,appdir,L"Desktop_v15") || !directory(cache)) goto fail;
+    if (!join(appdir,parent,L"NavalShipWeightSimulator") || !directory(appdir)) goto fail;
+    if (!join(cache,appdir,L"Desktop_v16") || !directory(cache)) goto fail;
     if (!join(logpath,cache,L"startup.log")) goto fail;
     logfile=_wfopen(logpath,L"a");
-    note("Naval Ship Weight Estimator - Windows desktop launcher v15");
+    note("Naval Ship Weight Simulator - Windows desktop launcher v16");
     note("Uses built-in extraction. PowerShell is not required.");
     note("Executable:"); note_wide(self); note("Cache:"); note_wide(cache);
     if (!join(marker,cache,L"ready.txt") || !join(runtime,cache,L"ShipRegression\\runtime\\pythonw.exe") || !join(script,cache,L"ShipRegression\\run_desktop.py")) goto fail;
     stage=L"Waiting for another startup";
-    lock=CreateMutexW(NULL,FALSE,L"Local\\NavalShipWeightEstimatorDesktopV15");
+    lock=CreateMutexW(NULL,FALSE,L"Local\\NavalShipWeightSimulatorDesktopV16");
     if (!lock) goto fail;
     DWORD wait=WaitForSingleObject(lock,0);
     if (wait==WAIT_TIMEOUT) {
@@ -235,7 +235,7 @@ static int start_application(void) {
         HANDLE ready=CreateFileW(marker,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,0,NULL);
         if (ready==INVALID_HANDLE_VALUE) goto fail;
         DWORD written=0;
-        int ok=WriteFile(ready,"v15\r\n",5,&written,NULL) && written==5;
+        int ok=WriteFile(ready,"v16\r\n",5,&written,NULL) && written==5;
         CloseHandle(ready); if (!ok) goto fail;
     } else note("Application files are ready (cached).");
     ReleaseMutex(lock); owns_lock=0; CloseHandle(lock); lock=NULL;
@@ -257,10 +257,10 @@ fail:
     if (input!=INVALID_HANDLE_VALUE) CloseHandle(input);
     if (lock) { if (owns_lock) ReleaseMutex(lock); CloseHandle(lock); }
     if (cancelled) { if (logfile) fclose(logfile); return 0; }
-    swprintf(message,CAP*2,L"Unable to start Naval Ship Weight Estimator.\nStage: %ls\nWindows error: %lu\nApplication exit code: %lu\n\nDiagnostic folder:\n%ls\n\nPlease send startup.log and runtime.log from this folder for diagnosis.",stage,failure_code,exit_code,cache);
+    swprintf(message,CAP*2,L"Unable to start Naval Ship Weight Simulator.\nStage: %ls\nWindows error: %lu\nApplication exit code: %lu\n\nDiagnostic folder:\n%ls\n\nPlease send startup.log and runtime.log from this folder for diagnosis.",stage,failure_code,exit_code,cache);
     fwprintf(stderr,L"%ls\n",message);
     note_wide(message); if (logfile) fclose(logfile);
-    MessageBoxW(NULL,message,L"Naval Ship Weight Estimator - Startup error",MB_OK|MB_ICONERROR);
+    MessageBoxW(NULL,message,L"Naval Ship Weight Simulator - Startup error",MB_OK|MB_ICONERROR);
     return 1;
 }
 

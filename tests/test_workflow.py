@@ -56,6 +56,8 @@ class UncorrectedWorkflowTests(unittest.TestCase):
         self.assertNotIn('S', coefficients.columns)
         self.assertEqual(coefficients.loc[0, '기준함종'], fitted.reference)
         self.assertIn('동시 추정', coefficients.loc[0, '추정방식'])
+        self.assertIn('MAPE 직접 최소화', coefficients.loc[0, '추정방식'])
+        self.assertEqual(coefficients.loc[0, '최적화 기준'], 'MAPE (%)')
 
     def test_comparison_scope_and_undefined_r_squared(self):
         session = EstimatorSession()

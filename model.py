@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
+from mape_fit import minimize_mape
 
 COLUMNS = ['함명', '함종', '경하중량', '길이', '폭', '깊이', '순항속력']
 NUMERIC = COLUMNS[2:]
@@ -20,6 +21,8 @@ class Fit:
     condition: float
     n_parameters: int
     residual_df: int
+    baseline_mape: float
+    optimization_evaluations: int
 
 
 def validate(data):
@@ -54,6 +57,8 @@ def validate(data):
 
 
 def fit(data, reference=None, correction=False):
+    if correction:
+        raise ValueError('MAPE 직접 최소화 모형에는 로그 역변환 편향 보정을 적용할 수 없습니다.')
     df = validate(data)
     types = sorted(df['함종'].unique())
     if reference is None:
@@ -63,7 +68,7 @@ def fit(data, reference=None, correction=False):
     if reference not in types:
         raise ValueError(f'기준 함종 {reference}의 실적선 자료가 필요합니다.')
     others = [t for t in types if t != reference]
-    # Common slopes plus type-specific intercepts, fitted in one least-squares solve.
+    # Joint common slopes and type effects; MAPE is minimized in original mass units.
     # D_reference=1 removes the otherwise redundant intercept/type parameter.
     volume = np.log(df['길이'].to_numpy()) + np.log(df['폭'].to_numpy()) + np.log(df['깊이'].to_numpy())
     x = np.column_stack([np.ones(len(df)), volume, np.log(df['순항속력']),
@@ -83,17 +88,14 @@ def fit(data, reference=None, correction=False):
         raise ValueError('함종 효과와 크기·속력 효과를 구분할 수 없습니다. '
                          '함종 내 크기·속력 변화가 있는 자료를 추가하세요.')
     y = np.log(df['경하중량'].to_numpy())
-    standardized = np.linalg.lstsq(z, y, rcond=None)[0]
-    coef = standardized.copy()
-    coef[1:] = standardized[1:] / scales
-    coef[0] = standardized[0] - means @ coef[1:]
-    residual = y - z @ standardized
+    slopes, intercepts, predicted_log, baseline_mape, evaluations = minimize_mape(x[:, 1:3], y, df['함종'].to_numpy())
+    reference_intercept = float(intercepts[(df['함종'] == reference).to_numpy()][0])
     with np.errstate(over='raise', under='raise', invalid='raise', divide='raise'):
         try:
-            k = float(np.exp(coef[0]))
-            smear = float(np.mean(np.exp(residual))) if correction else 1.0
-            factors = [1.0] + list(np.exp(coef[3:]).astype(float))
-            predicted = np.exp(z @ standardized) * smear
+            k = float(np.exp(reference_intercept))
+            smear = 1.0
+            factors = [1.0] + [float(np.exp(intercepts[(df['함종'] == typ).to_numpy()][0] - reference_intercept)) for typ in others]
+            predicted = np.exp(predicted_log)
         except FloatingPointError as exc:
             raise ValueError('계수 또는 예측값의 수치 범위를 초과했습니다. 자료의 단위와 공선성을 확인하세요.') from exc
     out = df.copy()
@@ -109,7 +111,7 @@ def fit(data, reference=None, correction=False):
                'R² (중량 기준)': float(1-np.sum((predicted-actual)**2)/sst) if sst > 0 else float('nan')}
     coeff = pd.DataFrame({'함종': [reference] + others, 'D_T': factors})
     coeff['실적선 수'] = coeff['함종'].map(df['함종'].value_counts())
-    return Fit(reference, coeff, out, metrics, k, float(coef[1]), float(coef[2]), smear, float(np.linalg.cond(z)), parameter_count, len(df) - parameter_count)
+    return Fit(reference, coeff, out, metrics, k, float(slopes[0]), float(slopes[1]), smear, float(np.linalg.cond(z)), parameter_count, len(df) - parameter_count, baseline_mape, evaluations)
 
 
 def predict(fitted, ship_type, length, beam, depth, speed):

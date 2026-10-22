@@ -5,7 +5,7 @@ from surface import mass_surface
 
 class SurfaceTests(unittest.TestCase):
     def test_surface_equation_and_log_plane(self):
-        fitted = fit(example(), correction=True)
+        fitted = fit(example(), correction=False)
         factor = fitted.coefficients.set_index('함종').loc['구축함', 'D_T']
         raw = mass_surface(fitted, '구축함')
         plane = mass_surface(fitted, '구축함', True)

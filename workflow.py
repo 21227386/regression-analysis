@@ -74,7 +74,9 @@ class EstimatorSession:
             self.data.rename(columns=EXCEL_HEADERS).to_excel(writer, sheet_name='입력자료', index=False)
             pd.DataFrame([{'K': fit_result.k, 'alpha': fit_result.alpha, 'beta': fit_result.beta,
                            '기준함종': fit_result.reference, '속력기준': '순항속력 (kn)',
-                           '추정방식': '전체 함종 로그 선형 최소제곱 동시 추정',
+                           '추정방식': '전체 함종 MAPE 직접 최소화 동시 추정',
+                           '최적화 기준': 'MAPE (%)', '기존 로그회귀 MAPE (%)': fit_result.baseline_mape,
+                           '최적화 평가 횟수': fit_result.optimization_evaluations,
                            '추정계수 수': fit_result.n_parameters, '잔차 자유도': fit_result.residual_df}]).to_excel(writer, sheet_name='회귀계수', index=False)
             fit_result.coefficients.to_excel(writer, sheet_name='함종별_DT', index=False)
             fit_result.results.to_excel(writer, sheet_name='실적함_비교', index=False)

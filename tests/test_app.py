@@ -9,7 +9,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(app.metric), 4)
         self.assertEqual(len(app.get('plotly_chart')), 1)
         app.selectbox(key='surface_type').select('구축함').run()
-        app.checkbox[1].check().run()
+        app.checkbox[0].check().run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get('plotly_chart')), 1)
         app.button[-1].click().run()

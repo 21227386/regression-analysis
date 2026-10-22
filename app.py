@@ -43,22 +43,20 @@ try:
     absent = [t for t in SHIP_TYPES if t not in data['함종'].unique()]
     if absent:
         st.warning('자료가 없어 설계계수를 추정할 수 없는 함종: ' + ', '.join(absent))
-    correction = st.checkbox('로그 역변환 편향 보정 적용 (Duan smearing)', value=False,
-                             help='전체 자료의 잔차로 보정배율 S를 추정합니다. 최종 식은 S·K·(LBH)^α·V^β·D_T입니다.')
-    fitted = fit(data, correction=correction)
+    fitted = fit(data)
     reference = fitted.reference
 except ValueError as exc:
     st.error(str(exc))
     st.stop()
 st.subheader('산출 계수')
 st.caption(f'자료가 있는 함종으로 K, α, β와 D_T를 동시에 추정합니다. 기준 함종 {reference}의 D_T는 1입니다.')
-st.dataframe(pd.DataFrame({'K': [fitted.k], 'α': [fitted.alpha], 'β': [fitted.beta], '보정배율 S': [fitted.smearing]}), hide_index=True)
+st.dataframe(pd.DataFrame({'K': [fitted.k], 'α': [fitted.alpha], 'β': [fitted.beta]}), hide_index=True)
 st.dataframe(fitted.coefficients, hide_index=True)
 if fitted.condition > 30:
     st.warning(f'변수 간 공선성이 높습니다 (표준화 설계행렬 조건수 {fitted.condition:.1f}). 계수가 불안정할 수 있습니다.')
 if (fitted.coefficients['실적선 수'] < 5).any():
     st.warning('일부 함종의 자료가 5척 미만입니다. 해당 설계계수의 신뢰성이 낮을 수 있습니다.')
-st.caption('전체 함종 로그 선형 최소제곱: ln(W) = ln(K) + α ln(LBH) + β ln(V) + ln(D_T). K는 입력 단위계에 의존합니다.')
+st.caption('전체 함종 MAPE 직접 최소화: 평균 |예측중량−실적중량| / 실적중량을 최소화합니다. K는 입력 단위계에 의존합니다.')
 st.subheader('실적선 비교')
 st.caption('자료 수 증가만으로 정확도 향상이 보장되지는 않습니다. 어느 함종이든 자료를 업데이트하면 공통 회귀계수와 함종별 D_T를 함께 다시 추정합니다. 서버에 학습자료를 자동 보관하지 않으므로 현재 학습자료 엑셀을 저장해 두세요.')
 st.warning('아래 수치는 학습에 사용한 실적선의 적합 오차입니다. 새로운 함정에 대한 예측 정확도를 보장하지 않습니다.')
@@ -70,12 +68,12 @@ st.dataframe(fitted.results, hide_index=True, width='stretch')
 st.scatter_chart(fitted.results, x='경하중량', y='예측중량', color='함종')
 st.caption('가로축: 실적 경하중량, 세로축: 예측 경하중량 (tonne). 두 값이 같을수록 잘 맞습니다.')
 st.download_button('실적선 비교 CSV', fitted.results.to_csv(index=False).encode('utf-8-sig'), 'fit_results.csv', 'text/csv')
-export = fitted.coefficients.assign(K=fitted.k, alpha=fitted.alpha, beta=fitted.beta, S=fitted.smearing, 기준함종=reference, 속력기준='순항속력(kn)')
+export = fitted.coefficients.assign(K=fitted.k, alpha=fitted.alpha, beta=fitted.beta, 기준함종=reference, 속력기준='순항속력(kn)')
 st.download_button('계수 CSV', export.to_csv(index=False).encode('utf-8-sig'), 'coefficients.csv', 'text/csv')
 st.subheader('함종별 3차원 경하중량 곡면')
 st.caption('함종의 D_T를 고정하고 LBH와 순항속력에 따른 예측 중량을 표시합니다. 마우스로 회전·확대할 수 있습니다.')
 surface_type = st.selectbox('곡면에 표시할 함종', fitted.coefficients['함종'], key='surface_type')
-log_surface = st.checkbox('로그 공간 평면으로 보기', help='ln(W) = ln(K·D_T·S) + α ln(LBH) + β ln(V)이므로 로그 공간에서는 평면입니다.')
+log_surface = st.checkbox('로그 공간 평면으로 보기', help='ln(W) = ln(K·D_T) + α ln(LBH) + β ln(V)이므로 로그 공간에서는 평면입니다.')
 st.caption('빨간 점은 실적 중량, 파란 점은 같은 치수·속력의 예측 중량이며 연결선은 두 값의 차이입니다. 곡면은 선택 함종의 관측 최소·최대 범위를 사용하지만, 자료가 드문 조합에서도 표시되므로 주의하세요.')
 try:
     surface_fig = mass_surface(fitted, surface_type, log_surface)
