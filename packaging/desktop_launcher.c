@@ -195,15 +195,15 @@ static int start_application(void) {
     len=GetEnvironmentVariableW(L"LOCALAPPDATA",parent,CAP);
     if (!len || len>=CAP) { if (!GetTempPathW(CAP,parent)) goto fail; }
     if (!join(appdir,parent,L"NavalShipWeightEstimator") || !directory(appdir)) goto fail;
-    if (!join(cache,appdir,L"Desktop_v6") || !directory(cache)) goto fail;
+    if (!join(cache,appdir,L"Desktop_v7") || !directory(cache)) goto fail;
     if (!join(logpath,cache,L"startup.log")) goto fail;
     logfile=_wfopen(logpath,L"a");
-    note("Naval Ship Weight Estimator - Windows desktop launcher v6");
+    note("Naval Ship Weight Estimator - Windows desktop launcher v7");
     note("Uses built-in extraction. PowerShell is not required.");
     note("Executable:"); note_wide(self); note("Cache:"); note_wide(cache);
     if (!join(marker,cache,L"ready.txt") || !join(runtime,cache,L"ShipRegression\\runtime\\pythonw.exe") || !join(script,cache,L"ShipRegression\\run_desktop.py")) goto fail;
     stage=L"Waiting for another startup";
-    lock=CreateMutexW(NULL,FALSE,L"Local\\NavalShipWeightEstimatorDesktopV6");
+    lock=CreateMutexW(NULL,FALSE,L"Local\\NavalShipWeightEstimatorDesktopV7");
     if (!lock) goto fail;
     DWORD wait=WaitForSingleObject(lock,0);
     if (wait==WAIT_TIMEOUT) {
@@ -235,7 +235,7 @@ static int start_application(void) {
         HANDLE ready=CreateFileW(marker,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,0,NULL);
         if (ready==INVALID_HANDLE_VALUE) goto fail;
         DWORD written=0;
-        int ok=WriteFile(ready,"v6\r\n",4,&written,NULL) && written==4;
+        int ok=WriteFile(ready,"v7\r\n",4,&written,NULL) && written==4;
         CloseHandle(ready); if (!ok) goto fail;
     } else note("Application files are ready (cached).");
     ReleaseMutex(lock); owns_lock=0; CloseHandle(lock); lock=NULL;

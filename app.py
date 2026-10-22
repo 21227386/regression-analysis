@@ -10,7 +10,7 @@ st.title('함정 경하중량 회귀분석')
 st.latex(r'W_{LS}=K(LBH)^{\alpha}V_c^{\beta}D_T')
 st.caption('표기 not는 knot(노트)와 같은 의미로 사용하며 수치 환산은 하지 않습니다. V_c는 순항속력(not)입니다. 최대속력으로 추정했던 계수는 그대로 재사용하지 않고 순항속력 자료로 다시 학습해야 합니다.')
 st.write('단위: 경하중량 tonne · 길이/폭/깊이 m · 순항속력 not. 깊이는 흘수와 구분하여 입력하세요.')
-st.info('① 호위함만으로 K, α, β 추정 → ② 계수를 고정하고 다른 함종의 D_T 산출 → ③ 새 함정 중량 예측. 호위함 D_T=1입니다.')
+st.info('전체 함종의 자료로 공통 K, α, β와 함종별 D_T를 동시에 추정한 뒤 새 함정 중량을 예측합니다. 지원함 D_T=1입니다.')
 with st.expander('순항속력 참고 범위 (사용자 제공 대략값)'):
     st.table(pd.DataFrame({'함종': ['구축함', '호위함', '고속함', '지원함'], '순항속력 (not)': ['17–20', '15–18', '15–20', '12–15']}))
     st.caption('참고 범위이며 자동 환산이나 입력 제한에 사용하지 않습니다. 실적선별 실제 순항속력을 입력하세요.')
@@ -45,22 +45,22 @@ try:
     if absent:
         st.warning('자료가 없어 설계계수를 추정할 수 없는 함종: ' + ', '.join(absent))
     correction = st.checkbox('로그 역변환 편향 보정 적용 (Duan smearing)', value=False,
-                             help='호위함 잔차로 보정배율 S를 추정합니다. 최종 식은 S·K·(LBH)^α·V^β·D_T이며 다른 함종 D_T는 S를 포함한 기본 예측 대비 산출합니다.')
+                             help='전체 자료의 잔차로 보정배율 S를 추정합니다. 최종 식은 S·K·(LBH)^α·V^β·D_T입니다.')
     fitted = fit(data, reference, correction)
 except ValueError as exc:
     st.error(str(exc))
     st.stop()
 st.subheader('산출 계수')
-st.caption('K, α, β: 호위함 자료만 사용. 다른 함종 D_T: 실적중량 ÷ [S·K·(LBH)^α·V^β]의 기하평균. 호위함 D_T는 1로 유지합니다.')
+st.caption('전체 함종의 자료로 K, α, β와 함종별 D_T를 동시에 추정합니다. 지원함 D_T는 1로 유지합니다.')
 st.dataframe(pd.DataFrame({'K': [fitted.k], 'α': [fitted.alpha], 'β': [fitted.beta], '보정배율 S': [fitted.smearing]}), hide_index=True)
 st.dataframe(fitted.coefficients, hide_index=True)
 if fitted.condition > 30:
     st.warning(f'변수 간 공선성이 높습니다 (표준화 설계행렬 조건수 {fitted.condition:.1f}). 계수가 불안정할 수 있습니다.')
 if (fitted.coefficients['실적선 수'] < 5).any():
     st.warning('일부 함종의 자료가 5척 미만입니다. 해당 설계계수의 신뢰성이 낮을 수 있습니다.')
-st.caption('호위함 로그 선형 최소제곱: ln(W) = ln(K) + α ln(LBH) + β ln(V) + ln(D_T). K는 입력 단위계에 의존합니다.')
+st.caption('전체 함종 로그 선형 최소제곱: ln(W) = ln(K) + α ln(LBH) + β ln(V) + ln(D_T). K는 입력 단위계에 의존합니다.')
 st.subheader('실적선 비교')
-st.caption('자료 수 증가만으로 정확도 향상이 보장되지는 않습니다. 다른 함종 자료는 해당 D_T를 갱신하며 K, α, β는 호위함 자료를 추가할 때 갱신됩니다. 서버에 학습자료를 자동 보관하지 않으므로 현재 학습자료 엑셀을 저장해 두세요.')
+st.caption('자료 수 증가만으로 정확도 향상이 보장되지는 않습니다. 어느 함종이든 자료를 업데이트하면 공통 회귀계수와 함종별 D_T를 함께 다시 추정합니다. 서버에 학습자료를 자동 보관하지 않으므로 현재 학습자료 엑셀을 저장해 두세요.')
 st.warning('아래 수치는 학습에 사용한 실적선의 적합 오차입니다. 새로운 함정에 대한 예측 정확도를 보장하지 않습니다.')
 cols = st.columns(4)
 for col, (name, val) in zip(cols, fitted.metrics.items()):

@@ -73,8 +73,9 @@ class EstimatorSession:
         with pd.ExcelWriter(out, engine='openpyxl') as writer:
             self.data.rename(columns={'순항속력': '순항속력 (not)'}).to_excel(writer, sheet_name='입력자료', index=False)
             pd.DataFrame([{'K': fit_result.k, 'alpha': fit_result.alpha, 'beta': fit_result.beta,
-                           '기준함종': '호위함', '속력기준': '순항속력 (not)',
-                           '추정방식': '호위함 회귀 후 타 함종 DT 산출'}]).to_excel(writer, sheet_name='회귀계수', index=False)
+                           '기준함종': fit_result.reference, '속력기준': '순항속력 (not)',
+                           '추정방식': '전체 함종 로그 선형 최소제곱 동시 추정',
+                           '추정계수 수': fit_result.n_parameters, '잔차 자유도': fit_result.residual_df}]).to_excel(writer, sheet_name='회귀계수', index=False)
             fit_result.coefficients.to_excel(writer, sheet_name='함종별_DT', index=False)
             fit_result.results.to_excel(writer, sheet_name='실적함_비교', index=False)
             pd.DataFrame([{'조회 범위': scope, '척수': len(self.comparison(scope)[0]), **self.comparison(scope)[1]}

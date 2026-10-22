@@ -10,17 +10,17 @@ class ExcelTests(unittest.TestCase):
         df = example().drop(columns='함명')
         loaded = read_excel(BytesIO(workbook_bytes(df)))
         result = fit(loaded)
-        self.assertEqual(result.reference, '호위함')
+        self.assertEqual(result.reference, '지원함')
         self.assertEqual(len(result.results), 48)
-        self.assertEqual(result.coefficients.set_index('함종').loc['호위함', 'D_T'], 1)
+        self.assertEqual(result.coefficients.set_index('함종').loc['지원함', 'D_T'], 1)
         np.testing.assert_allclose(result.results['예측중량'], fit(example()).results['예측중량'])
 
     def test_unknown_type_and_missing_reference(self):
         df = example()
         df.loc[0, '함종'] = '기타'
         with self.assertRaisesRegex(ValueError, '허용되지 않은 함종'): validate(df)
-        df = example().query("함종 != '호위함'")
-        with self.assertRaisesRegex(ValueError, '호위함'): fit(df)
+        df = example().query("함종 != '지원함'")
+        with self.assertRaisesRegex(ValueError, '지원함'): fit(df)
 
     def test_select_sheet_and_blank_rows(self):
         buf = BytesIO()

@@ -6,7 +6,7 @@ import pandas as pd
 COLUMNS = ['함명', '함종', '경하중량', '길이', '폭', '깊이', '순항속력']
 NUMERIC = COLUMNS[2:]
 SHIP_TYPES = ['구축함', '호위함', '고속함', '지원함']
-REFERENCE = '호위함'
+REFERENCE = '지원함'
 
 @dataclass
 class Fit:
@@ -19,6 +19,8 @@ class Fit:
     beta: float
     smearing: float
     condition: float
+    n_parameters: int
+    residual_df: int
 
 
 def validate(data):
@@ -56,32 +58,37 @@ def fit(data, reference=REFERENCE, correction=False):
     if reference not in types:
         raise ValueError(f'기준 함종 {reference}의 실적선 자료가 필요합니다.')
     others = [t for t in types if t != reference]
-    ref = df[df['함종'] == reference]
-    if len(ref) < 4:
-        raise ValueError(f'{reference} 자료가 최소 4척 필요합니다. 다양한 크기·속력 자료를 입력하세요.')
-    def design(frame):
-        volume = np.log(frame['길이'].to_numpy()) + np.log(frame['폭'].to_numpy()) + np.log(frame['깊이'].to_numpy())
-        return np.column_stack([np.ones(len(frame)), volume, np.log(frame['순항속력'])])
-    x = design(ref)
+    # Common slopes plus type-specific intercepts, fitted in one least-squares solve.
+    # D_reference=1 removes the otherwise redundant intercept/type parameter.
+    volume = np.log(df['길이'].to_numpy()) + np.log(df['폭'].to_numpy()) + np.log(df['깊이'].to_numpy())
+    x = np.column_stack([np.ones(len(df)), volume, np.log(df['순항속력']),
+                         *[(df['함종'] == t).to_numpy(dtype=float) for t in others]])
+    parameter_count = x.shape[1]
+    if len(df) <= parameter_count:
+        raise ValueError(f'전체 {len(types)}개 함종의 동시 추정에는 최소 {parameter_count + 1}척이 필요합니다. '
+                         f'현재 {len(df)}척이며 추정계수는 {parameter_count}개입니다.')
+    # Standardize predictors for a meaningful rank/conditioning check and stable solve.
+    means = x[:, 1:].mean(axis=0)
+    scales = x[:, 1:].std(axis=0)
+    if (scales == 0).any():
+        raise ValueError('전체 자료의 크기 또는 순항속력이 일정하여 계수를 구분할 수 없습니다.')
     z = x.copy()
-    scale = z[:, 1:].std(axis=0)
-    if (scale == 0).any():
-        raise ValueError(f'{reference} 크기 또는 속력이 일정하여 계수를 구분할 수 없습니다.')
-    z[:, 1:] = (z[:, 1:] - z[:, 1:].mean(axis=0)) / scale
-    if np.linalg.matrix_rank(z) < 3:
-        raise ValueError(f'{reference} 변수 간 완전한 선형관계로 계수를 구분할 수 없습니다.')
-    y = np.log(ref['경하중량'].to_numpy())
-    coef = np.linalg.lstsq(x, y, rcond=None)[0]
-    residual = y - x @ coef
-    with np.errstate(over='raise', invalid='raise', divide='raise'):
+    z[:, 1:] = (x[:, 1:] - means) / scales
+    if np.linalg.matrix_rank(z) < parameter_count:
+        raise ValueError('함종 효과와 크기·속력 효과를 구분할 수 없습니다. '
+                         '함종 내 크기·속력 변화가 있는 자료를 추가하세요.')
+    y = np.log(df['경하중량'].to_numpy())
+    standardized = np.linalg.lstsq(z, y, rcond=None)[0]
+    coef = standardized.copy()
+    coef[1:] = standardized[1:] / scales
+    coef[0] = standardized[0] - means @ coef[1:]
+    residual = y - z @ standardized
+    with np.errstate(over='raise', under='raise', invalid='raise', divide='raise'):
         try:
             k = float(np.exp(coef[0]))
             smear = float(np.mean(np.exp(residual))) if correction else 1.0
-            log_base = design(df) @ coef + np.log(smear)
-            log_ratio = np.log(df['경하중량'].to_numpy()) - log_base
-            factors = [1.0] + [float(np.exp(log_ratio[(df['함종'] == t).to_numpy()].mean())) for t in others]
-            mapping = dict(zip([reference] + others, factors))
-            predicted = np.exp(log_base + np.log(df['함종'].map(mapping).to_numpy()))
+            factors = [1.0] + list(np.exp(coef[3:]).astype(float))
+            predicted = np.exp(z @ standardized) * smear
         except FloatingPointError as exc:
             raise ValueError('계수 또는 예측값의 수치 범위를 초과했습니다. 자료의 단위와 공선성을 확인하세요.') from exc
     out = df.copy()
@@ -97,7 +104,7 @@ def fit(data, reference=REFERENCE, correction=False):
                'R² (중량 기준)': float(1-np.sum((predicted-actual)**2)/sst) if sst > 0 else float('nan')}
     coeff = pd.DataFrame({'함종': [reference] + others, 'D_T': factors})
     coeff['실적선 수'] = coeff['함종'].map(df['함종'].value_counts())
-    return Fit(reference, coeff, out, metrics, k, float(coef[1]), float(coef[2]), smear, float(np.linalg.cond(z)))
+    return Fit(reference, coeff, out, metrics, k, float(coef[1]), float(coef[2]), smear, float(np.linalg.cond(z)), parameter_count, len(df) - parameter_count)
 
 
 def predict(fitted, ship_type, length, beam, depth, speed):

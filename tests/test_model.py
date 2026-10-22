@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import pandas as pd
 from model import example, fit, predict
 
 class RegressionTests(unittest.TestCase):
@@ -33,31 +34,55 @@ class RegressionTests(unittest.TestCase):
 
 if __name__ == '__main__': unittest.main()
 
-class SequentialTests(unittest.TestCase):
-    def test_other_types_cannot_change_reference_coefficients(self):
+class JointTests(unittest.TestCase):
+    def test_other_types_contribute_to_common_slopes(self):
         df = example()
         first = fit(df)
-        df.loc[df['함종'] == '구축함', '경하중량'] *= 2
+        mask = df['함종'] == '구축함'
+        df.loc[mask, '경하중량'] *= (df.loc[mask, '길이'] / 100) ** 2
         second = fit(df)
-        np.testing.assert_allclose([first.k, first.alpha, first.beta], [second.k, second.alpha, second.beta])
-        a = first.coefficients.set_index('함종')['D_T']
-        b = second.coefficients.set_index('함종')['D_T']
-        self.assertAlmostEqual(b['구축함'], 2*a['구축함'])
-        self.assertAlmostEqual(b['호위함'], 1)
+        self.assertGreater(abs(second.alpha - first.alpha), .01)
+        self.assertEqual(second.coefficients.set_index('함종').loc['지원함', 'D_T'], 1)
 
-    def test_dt_is_geometric_mean_ratio_including_correction(self):
+    def test_reference_changes_scale_but_not_predictions_for_noisy_data(self):
         for correction in [False, True]:
-            df = example()
-            result = fit(df, correction=correction)
-            rows = df[df['함종'] == '지원함']
-            base = result.smearing*result.k*(rows['길이']*rows['폭']*rows['깊이'])**result.alpha*rows['순항속력']**result.beta
-            expected = np.exp(np.log(rows['경하중량']/base).mean())
-            self.assertAlmostEqual(result.coefficients.set_index('함종').loc['지원함', 'D_T'], expected)
+            first = fit(example(), '지원함', correction)
+            for reference in ['호위함', '구축함', '고속함']:
+                second = fit(example(), reference, correction)
+                np.testing.assert_allclose(first.results['예측중량'], second.results['예측중량'], rtol=1e-10)
+                np.testing.assert_allclose([first.alpha, first.beta], [second.alpha, second.beta])
+                factors = first.coefficients.set_index('함종')['D_T']
+                self.assertAlmostEqual(second.k, first.k * factors[reference])
 
-    def test_more_other_ships_cannot_replace_reference_data(self):
+    def test_support_many_destroyer_four_frigate_three(self):
+        df = example().groupby('함종', group_keys=False).head(3)
+        all_rows = example()
+        df = pd.concat([all_rows.query("함종 == '지원함'"),
+                        all_rows.query("함종 == '구축함'").head(4),
+                        all_rows.query("함종 == '호위함'").head(3)], ignore_index=True)
+        result = fit(df)
+        self.assertEqual(result.reference, '지원함')
+        self.assertEqual(result.n_parameters, 5)
+        self.assertEqual(result.residual_df, 14)
+        self.assertTrue(np.isfinite(result.results['예측중량']).all())
+        with self.assertRaisesRegex(ValueError, '없는 함종'): predict(result, '고속함', 100, 15, 8, 16)
+
+    def test_single_type_and_single_observation_nonreference_type(self):
         df = example()
-        df = df.drop(df[df['함종'] == '호위함'].index[3:])
-        with self.assertRaisesRegex(ValueError, '최소 4척'): fit(df)
+        support = df.query("함종 == '지원함'")
+        result = fit(support)
+        self.assertEqual(result.n_parameters, 3)
+        mixed = fit(pd.concat([support, df.query("함종 == '호위함'").head(1)]))
+        self.assertEqual(mixed.n_parameters, 4)
+        self.assertAlmostEqual(mixed.results.iloc[-1]['예측중량'], mixed.results.iloc[-1]['경하중량'])
+
+    def test_rank_checks_account_for_type_effects_and_residual_degrees(self):
+        df = example()
+        # Speed varies overall, but only between types: beta is confounded with D_T.
+        df['순항속력'] = df['함종'].map({'지원함': 12, '호위함': 16, '구축함': 18, '고속함': 20})
+        with self.assertRaisesRegex(ValueError, '함종 효과'): fit(df)
+        df = example().groupby('함종', group_keys=False).head(1)
+        with self.assertRaisesRegex(ValueError, '최소 7척'): fit(df)
 
 class CruiseSpeedTests(unittest.TestCase):
     def test_maximum_speed_is_never_silently_relabelled(self):

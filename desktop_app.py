@@ -443,7 +443,7 @@ class EstimatorFrame(wx.Frame):
         self.input_table = Table(data_card)
         self.input_table.show_frame(pd.DataFrame(columns=COLUMNS))
         ds.Add(self.input_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
-        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 not   |   호위함 최소 4척, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
+        ds.Add(label(data_card, '중량 tonne  ·  길이/폭/깊이 m  ·  순항속력 not   |   지원함 포함 · 전체 함종 동시 추정, 함명은 선택 항목', 9, color='#7A8DA2'), 0, wx.ALL, 18)
         data_card.SetSizer(ds)
         s.Add(data_card, 1, wx.EXPAND)
 
@@ -460,7 +460,7 @@ class EstimatorFrame(wx.Frame):
         equation = wx.Image(str(equation_path)).Scale(570, 83, wx.IMAGE_QUALITY_HIGH)
         self.equation_bitmap = wx.StaticBitmap(intro, bitmap=wx.Bitmap(equation))
         info.Add(self.equation_bitmap, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
-        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 호위함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        info.Add(label(intro, 'Vc: 순항속력(not)    |    기준 함종: 지원함(설계계수 1)', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         self.coefficients = label(intro, '실적함 파일을 업로드하면 회귀계수를 자동 산출합니다.', 9, color='#7A8DA2')
         info.Add(self.coefficients, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 20)
         intro.SetSizer(info)
@@ -488,7 +488,7 @@ class EstimatorFrame(wx.Frame):
         ds = wx.BoxSizer(wx.VERTICAL)
         caption, self.dt_symbol, _ = math_caption(dt, 'DT', '함종별 설계계수')
         ds.Add(caption, 0, wx.ALL, 18)
-        ds.Add(label(dt, '호위함 회귀계수 고정 후 산출', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
+        ds.Add(label(dt, '전체 자료로 회귀계수와 동시 산출', 9, color='#7A8DA2'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         self.dt_table = Table(dt)
         ds.Add(self.dt_table, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
         dt.SetSizer(ds)
@@ -576,7 +576,7 @@ class EstimatorFrame(wx.Frame):
         self.prediction_warning = label(result, '', 10, color='#F3CB87')
         rs.Add(self.prediction_warning, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         rs.AddStretchSpacer()
-        rs.Add(label(result, '호위함 기반 회귀모형 + 함종별 설계계수', 10, True, '#FFFFFF'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
+        rs.Add(label(result, '전체 함종 공통 회귀모형 + 함종별 설계계수', 10, True, '#FFFFFF'), 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         info = label(result, '학습자료 범위를 벗어난 제원은 외삽으로 안내합니다.\n예측값은 설계 검토를 위한 추정치입니다.', 9, color='#C0D2E5')
         rs.Add(info, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 26)
         result.SetSizer(rs)
@@ -717,9 +717,12 @@ class EstimatorFrame(wx.Frame):
             self.coefficients.Hide()
             self.dt_table.show_frame(fitted.coefficients)
             self.refresh_comparison()
-            warnings = ['학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
+            warnings = [f'전체 {len(data)}척 동시 추정 · 추정계수 {fitted.n_parameters}개 · 잔차 자유도 {fitted.residual_df}.',
+                        '학습 자료의 적합 오차이며, 새로운 함정에 대한 검증 성능이 아닙니다.']
+            if fitted.residual_df < 5:
+                warnings.append('잔차 자유도가 작아 계수가 불안정할 수 있습니다.')
             if fitted.condition > 30:
-                warnings.append('호위함 자료의 공선성이 높아 계수가 불안정할 수 있습니다.')
+                warnings.append('전체 자료의 공선성이 높아 계수가 불안정할 수 있습니다.')
             if (fitted.coefficients['실적선 수'] < 5).any():
                 warnings.append('일부 함종은 실적함이 5척 미만입니다.')
             self.model_warning.SetLabel(' '.join(warnings))
@@ -840,6 +843,8 @@ def smoke_test(frame, output):
     frame.refresh()
     assert frame.session.fitted is not None
     assert frame.input_table.GetItemCount() == 48
+    assert frame.session.fitted.reference == '지원함'
+    assert frame.session.fitted.coefficients.set_index('함종').loc['지원함', 'D_T'] == 1.0
     assert frame.estimate_button.IsEnabled()
     frame.ship_type.SetStringSelection('호위함')
     frame.estimate()
@@ -859,6 +864,21 @@ def smoke_test(frame, output):
         frame.graph_mode.SetSelection(mode)
         frame.draw_graph()
     checks.append('Comparison chart, 3D surface and log plane: PASS')
+    user_mix = pd.concat([data.query("함종 == '지원함'"),
+                         data.query("함종 == '구축함'").head(4),
+                         data.query("함종 == '호위함'").head(3)], ignore_index=True)
+    frame.session.load(read_excel(BytesIO(workbook_bytes(user_mix))))
+    frame.refresh()
+    assert frame.session.fitted is not None and frame.session.fitted.residual_df == 14
+    frame.estimate()
+    assert '—' not in frame.prediction.GetLabel()
+    frame.session.load(user_mix.head(3))
+    frame.refresh()
+    assert frame.session.fitted is None and not frame.estimate_button.IsEnabled()
+    assert frame.result_table.GetItemCount() == 0
+    frame.session.load(data)
+    frame.refresh()
+    checks.append('Support 12 / destroyer 4 / frigate 3 joint fit, prediction and invalid replacement clearing: PASS')
     report = frame.session.report_bytes()
     assert len(pd.ExcelFile(BytesIO(report)).sheet_names) == 5
     replacement = data.copy()
