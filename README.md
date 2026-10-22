@@ -2,7 +2,7 @@
 
 ## Windows 실행파일 다운로드
 
-[ShipRegression_CruiseSpeed_not.exe 다운로드](https://github.com/21227386/regression-analysis/raw/refs/heads/main/downloads/ShipRegression_CruiseSpeed_not.exe) — 약 100MB
+[Naval Ship Weight Estimator.exe 다운로드](https://github.com/21227386/regression-analysis/raw/refs/heads/main/downloads/Naval%20Ship%20Weight%20Estimator.exe) — 약 100MB
 
 다운로드 후 EXE를 더블클릭하세요. Python 설치나 수동 압축 해제 없이 첫 실행 시 필요한 파일을 자동으로 준비합니다. Windows 10/11 64비트용입니다.
 
