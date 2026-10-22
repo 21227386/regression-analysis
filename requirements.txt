@@ -1,0 +1,5 @@
+numpy==2.2.6
+pandas>=2.2,<3
+streamlit>=1.40,<2
+openpyxl>=3.1.5,<4
+plotly>=6,<7
